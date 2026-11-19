@@ -44,6 +44,8 @@ import {
   AudioLines
 } from 'lucide-react';
 
+import ranepaCrest from './assets/ranepa_crest.png';
+
 // --- СПРАВОЧНИКИ ПЛАТФОРМЫ ДОБРО.РФ ---
 const DOBRO_DIRECTIONS = [
   '#МЫВМЕСТЕ',
@@ -456,72 +458,15 @@ const METHODICAL_MATERIALS = [
   }
 ];
 
-// --- ГЕРБ ПРЕЗИДЕНТСКОЙ АКАДЕМИИ (ВЕКТОРНЫЙ SVG В СТИЛЕ ШАБЛОНА RANEPA) ---
-function RanepaCrestSvg() {
+// --- ОФИЦИАЛЬНЫЙ ГЕРБ ПРЕЗИДЕНТСКОЙ АКАДЕМИИ (РАНХиГС) ---
+function RanepaCrestSvg({ className = "w-10 h-12 object-contain shrink-0" }) {
   return (
-    <svg
-      viewBox="0 0 64 68"
-      className="w-11 h-12 shrink-0"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="Герб Президентской академии"
-    >
-      {/* Золотой лавровый венок */}
-      <path
-        d="M14 48C8 40 7 26 13 15C16 10 21 6 26 4"
-        stroke="#D99B26"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M50 48C56 40 57 26 51 15C48 10 43 6 38 4"
-        stroke="#D99B26"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-      />
-      {/* Лучи и корона */}
-      <circle cx="32" cy="14" r="4" fill="#D99B26" />
-      <path d="M24 16L28 10L32 14L36 10L40 16H24Z" fill="#E5A93B" />
-      {/* Крылья орла */}
-      <path
-        d="M12 24C16 20 21 20 24 24C19 28 15 33 13 38C10 33 10 28 12 24Z"
-        fill="#E09F2D"
-      />
-      <path
-        d="M52 24C48 20 43 20 40 24C45 28 49 33 51 38C54 33 54 28 52 24Z"
-        fill="#E09F2D"
-      />
-      {/* Центральный геральдический щит */}
-      <path
-        d="M21 19H43V34C43 42 32 47 32 47C32 47 21 42 21 34V19Z"
-        fill="#9E1B32"
-        stroke="#D99B26"
-        strokeWidth="2"
-      />
-      {/* Раскрытая книга знаний внутри щита */}
-      <path
-        d="M25 27C27.5 26.2 30 26.5 32 27.8C34 26.5 36.5 26.2 39 27V36C36.5 35.2 34 35.5 32 36.8C30 35.5 27.5 35.2 25 36V27Z"
-        fill="#FFFFFF"
-      />
-      <line x1="32" y1="27.5" x2="32" y2="36.8" stroke="#9E1B32" strokeWidth="1.2" />
-      {/* Бордовая девизная лента РАНХиГС внизу */}
-      <path
-        d="M12 53L20 49H44L52 53L48 60L42 56H22L16 60L12 53Z"
-        fill="#9E1B32"
-      />
-      <text
-        x="32"
-        y="55"
-        textAnchor="middle"
-        fill="#FFFFFF"
-        fontSize="5.8"
-        fontWeight="bold"
-        fontFamily="sans-serif"
-        letterSpacing="0.4"
-      >
-        РАНХиГС
-      </text>
-    </svg>
+    <img
+      src={ranepaCrest}
+      alt="Герб Президентской академии (РАНХиГС)"
+      className={className}
+      loading="eager"
+    />
   );
 }
 
@@ -647,39 +592,57 @@ export default function App() {
     showToast('Форма и шаблон полностью очищены');
   };
 
+  // Вспомогательная функция для безопасного чтения PDF в Base64 для ИИ-сервера
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   // Загрузка реальных файлов в источники (Кнопка 1: «Загрузить в источники»)
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     const newSources = [];
-    for (const file of files.slice(0, 20)) {
-      let extractedText = `Документ организации: ${file.name} (${(file.size / 1024).toFixed(1)} КБ).`;
-      try {
-        if (
-          file.type.startsWith('text/') ||
-          file.name.endsWith('.txt') ||
-          file.name.endsWith('.md') ||
-          file.name.endsWith('.csv') ||
-          file.name.endsWith('.json')
-        ) {
-          const textContent = await file.text();
-          extractedText = textContent.slice(0, 2500);
+    for (const file of files.slice(0, 15)) {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        try {
+          const base64Data = await fileToBase64(file);
+          newSources.push({
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'file',
+            title: file.name,
+            mimeType: 'application/pdf',
+            base64Data,
+            meta: `PDF · ${(file.size / (1024 * 1024)).toFixed(1)} МБ`,
+            content: `Прикреплен PDF-документ: ${file.name}`
+          });
+        } catch (err) {
+          console.error('Ошибка кодирования PDF:', err);
         }
-      } catch (err) {
-        // Используем метаданные файла
-      }
+      } else {
+        let extractedText = '';
+        try {
+          extractedText = await file.text();
+        } catch (err) {
+          extractedText = `Документ организации: ${file.name} (${(file.size / 1024).toFixed(1)} КБ).`;
+        }
 
-      newSources.push({
-        id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        type: 'file',
-        title: file.name,
-        meta: `Файл · ${Math.max(0.1, (file.size / (1024 * 1024)).toFixed(1))} МБ`,
-        content: extractedText
-      });
+        newSources.push({
+          id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'file',
+          title: file.name,
+          meta: `Документ · ${(file.size / 1024).toFixed(0)} КБ`,
+          content: (extractedText || `Документ: ${file.name}`).slice(0, 15000)
+        });
+      }
     }
 
     setSources((prev) => [...prev, ...newSources].slice(0, 20));
+    setSourceModalOpen(false);
     setValidationError('');
     showToast(`Добавлено в источники файлов: ${newSources.length}`);
   };
@@ -736,177 +699,130 @@ export default function App() {
   }, [isRecording]);
 
   const handleToggleMicrophone = () => {
-    if (!isRecording) {
-      setIsRecording(true);
-      setLiveTranscript('');
-      setValidationError('');
-
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (SpeechRecognition) {
-        try {
-          const recognition = new SpeechRecognition();
-          recognition.lang = 'ru-RU';
-          recognition.continuous = true;
-          recognition.interimResults = true;
-
-          recognition.onresult = (event) => {
-            let transcript = '';
-            for (let i = 0; i < event.results.length; i++) {
-              transcript += event.results[i][0].transcript + ' ';
-            }
-            setLiveTranscript(transcript.trim());
-          };
-
-          recognition.onerror = () => {
-            // Продолжаем запись с резервной обработкой
-          };
-
-          recognition.start();
-          recognitionRef.current = recognition;
-        } catch (e) {
-          // Если браузер блокирует микрофон во фрейме, работает таймер записи
-        }
-      }
-    } else {
-      // Остановка записи и сохранение голосового источника
-      setIsRecording(false);
+    if (isRecording) {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
         recognitionRef.current = null;
       }
+      setIsRecording(false);
 
-      const finalSpokenText =
-        liveTranscript.trim() ||
-        (orgName
-          ? `Голосовое описание от организации «${orgName}»: проведение социального проекта, привлечение студентов Президентской академии к аналитическому исследованию целевой аудитории, разработке цифрового навигатора и информационному сопровождению.`
-          : 'Голосовое сообщение партнера: мы хотим организовать социально значимый проект для жителей и благополучателей, нам нужна помощь студенческих команд в аналитике, разработке прикладного продукта и проведении мероприятия.');
+      if (liveTranscript.trim()) {
+        const durationStr = `00:${String(Math.max(1, recordSeconds)).padStart(2, '0')}`;
+        setSources((prev) => [
+          ...prev,
+          {
+            id: `voice-${Date.now()}`,
+            type: 'voice',
+            title: `Голосовая запись (${durationStr})`,
+            meta: 'Распознано в источник',
+            content: liveTranscript.trim()
+          }
+        ]);
+        showToast('Голосовое описание добавлено в источники');
+      }
+      setLiveTranscript('');
+      return;
+    }
 
-      const durationStr = `00:${String(Math.max(1, recordSeconds)).padStart(2, '0')}`;
-      const newVoiceSource = {
-        id: `voice-${Date.now()}`,
-        type: 'voice',
-        title: `Голосовая запись (${durationStr})`,
-        meta: 'Аудио · Распознано в источник',
-        content: finalSpokenText
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setValidationError(
+        'Ваш браузер не поддерживает голосовой ввод (Web Speech API). Используйте Chrome, Яндекс.Браузер или Edge, либо загрузите файл.'
+      );
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ru-RU';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      let finalText = '';
+      recognition.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalText += event.results[i][0].transcript + ' ';
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+        setLiveTranscript((finalText + interim).trim());
       };
 
-      setSources((prev) => [...prev, newVoiceSource]);
+      recognition.onerror = () => {
+        setIsRecording(false);
+        showToast('Микрофон остановлен. Проверьте разрешения браузера на аудио.');
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
       setLiveTranscript('');
-      showToast('Голосовая запись добавлена в источники');
+      setIsRecording(true);
+      setValidationError('');
+      recognition.start();
+    } catch (e) {
+      setValidationError('Ошибка доступа к микрофону. Проверьте разрешения в браузере.');
     }
   };
 
-  // Вызов Gemini API с экспоненциальным повтором для реальной генерации шаблона Добро.рф
-  const callGeminiForDobroTemplate = async (compiledSourcesText) => {
-    const apiKey = '';
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+  // Вызов серверного эндпоинта /api/generate (Vercel Serverless + Gemini API)
+  const callBackendGenerate = async () => {
+    const apiEndpoint = import.meta.env.VITE_API_ENDPOINT || '/api/generate';
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgName,
+          contactFio,
+          contactPhone,
+          contactEmail,
+          sources
+        })
+      });
 
-    const systemPrompt = `Ты — методолог федеральной программы «Обучение служением» в Президентской академии (РАНХиГС).
-Твоя задача: проанализировать переданные источники от социального партнера (НКО, госсектора или бизнеса) и сформулировать ровно 3 варианта проектных учебно-социальных задач для студентов, полностью заполнив все поля шаблона верификации платформы Добро.рф.
-Не используй смайлики или эмодзи. Пиши строгим, профессиональным, академическим языком.
-Для поля directions выбирай от 1 до 3 хештегов СТРОГО из списка: ${DOBRO_DIRECTIONS.join(', ')}.
-Для поля participation_format выбирай строго из: Очный, Заочный / Онлайн, Гибридный.
-Для поля edu_institution_type всегда указывай: Высшее учебное заведение.`;
-
-    const userPrompt = `Организация партнера: ${orgName || 'Социальный партнер программы Обучение служением'}
-Контактное лицо: ${contactFio}
-Загруженные источники и голосовые материалы:
-${compiledSourcesText}
-
-Сформируй 3 разноплановых варианта социальных задач (Вариант 1 — Аналитика и исследование, Вариант 2 — Разработка прикладного или цифрового продукта, Вариант 3 — Коммуникации, медиа или организация мероприятия) для автоматического заполнения шаблона Добро.рф.`;
-
-    const payload = {
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'ARRAY',
-          items: {
-            type: 'OBJECT',
-            properties: {
-              variantLabel: { type: 'STRING' },
-              task_title: { type: 'STRING' },
-              directions: {
-                type: 'ARRAY',
-                items: { type: 'STRING' }
-              },
-              task_description: { type: 'STRING' },
-              target_audience: { type: 'STRING' },
-              expected_product: { type: 'STRING' },
-              region: { type: 'STRING' },
-              participation_format: { type: 'STRING' },
-              edu_institution_type: { type: 'STRING' },
-              ready_for_on_site: { type: 'BOOLEAN' },
-              additional_info: { type: 'STRING' }
-            },
-            required: [
-              'variantLabel',
-              'task_title',
-              'directions',
-              'task_description',
-              'target_audience',
-              'expected_product',
-              'region',
-              'participation_format',
-              'edu_institution_type',
-              'ready_for_on_site',
-              'additional_info'
-            ]
-          }
-        }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.warn('Сервер вернул ошибку:', errorData || response.status);
+        return null;
       }
-    };
 
-    const delays = [1000, 2000, 4000];
-    for (let attempt = 0; attempt <= delays.length; attempt++) {
-      try {
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (jsonText) {
-          const parsed = JSON.parse(jsonText);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.map((item, idx) => ({
-              id: `ai-task-${Date.now()}-${idx}`,
-              variantLabel: item.variantLabel || `Вариант ${idx + 1}`,
-              task_title: (item.task_title || '').slice(0, 120),
-              directions: Array.isArray(item.directions)
-                ? item.directions
-                    .filter((d) => DOBRO_DIRECTIONS.includes(d))
-                    .slice(0, 3)
-                : ['#МЫВМЕСТЕ'],
-              task_description: (item.task_description || '').slice(0, 3000),
-              target_audience: (item.target_audience || '').slice(0, 3000),
-              expected_product: (item.expected_product || '').slice(0, 3000),
-              region: RUSSIAN_REGIONS.includes(item.region) ? item.region : 'Москва',
-              participation_format: PARTICIPATION_FORMATS.includes(
-                item.participation_format
-              )
-                ? item.participation_format
-                : 'Гибридный',
-              edu_institution_type: 'Высшее учебное заведение',
-              ready_for_on_site: Boolean(item.ready_for_on_site),
-              additional_info: (item.additional_info || '').slice(0, 3000)
-            }));
-          }
-        }
-      } catch (err) {
-        if (attempt < delays.length) {
-          await new Promise((r) => setTimeout(r, delays[attempt]));
-        }
+      const data = await response.json();
+      if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+        return data.tasks.map((item, idx) => ({
+          ...item,
+          id: `ai-task-${Date.now()}-${idx}`,
+          variantLabel: item.variantLabel || `Вариант ${idx + 1}`,
+          task_title: (item.task_title || '').slice(0, 120),
+          directions: Array.isArray(item.directions)
+            ? item.directions.filter((d) => DOBRO_DIRECTIONS.includes(d)).slice(0, 3)
+            : ['#МЫВМЕСТЕ'],
+          task_description: (item.task_description || '').slice(0, 3000),
+          target_audience: (item.target_audience || '').slice(0, 3000),
+          expected_product: (item.expected_product || '').slice(0, 3000),
+          region: RUSSIAN_REGIONS.includes(item.region) ? item.region : 'Москва',
+          participation_format: PARTICIPATION_FORMATS.includes(item.participation_format)
+            ? item.participation_format
+            : 'Гибридный',
+          edu_institution_type: 'Высшее учебное заведение',
+          ready_for_on_site: Boolean(item.ready_for_on_site),
+          additional_info: (item.additional_info || '').slice(0, 3000)
+        }));
       }
+      return null;
+    } catch (err) {
+      console.warn('Серверный вызов /api/generate не удался:', err.message);
+      return null;
     }
-    return null;
   };
 
   // Кнопка 3: «Отправить» — валидация, генерация и автозаполнение шаблона
@@ -935,23 +851,20 @@ ${compiledSourcesText}
     }
 
     setIsGenerating(true);
-    setGenerationStatus('Анализ загруженных источников и голосовых записей...');
-
-    const compiledSources = sources
-      .map((s, i) => `Источник ${i + 1} (${s.title}): ${s.content}`)
-      .join('\n\n');
+    setGenerationStatus('Анализ загруженных источников и запуск ИИ-методолога...');
 
     setTimeout(() => {
       setGenerationStatus('Формулирование проектных задач и автозаполнение шаблона Добро.рф...');
-    }, 700);
+    }, 800);
 
-    // Пытаемся сгенерировать через реальный Gemini API, либо используем интеллектуальную сборку по источникам
-    const aiResult = await callGeminiForDobroTemplate(compiledSources);
+    // Вызываем серверный эндпоинт Vercel /api/generate
+    const aiResult = await callBackendGenerate();
 
     if (aiResult && aiResult.length > 0) {
       setTasksList(aiResult);
+      showToast('Шаблон Добро.рф успешно сформирован ИИ на основе ваших материалов!');
     } else {
-      // Надежный резервный генератор на основе загруженных источников или выбранного пресета
+      // Надежный резервный генератор на случай локального запуска без подключенного API-ключа
       const presetFallback =
         activePresetKey && OPTIONAL_PRESETS[activePresetKey]
           ? OPTIONAL_PRESETS[activePresetKey].tasks
@@ -966,12 +879,12 @@ ${compiledSourcesText}
         additional_info: `${t.additional_info}\n\nМатериалы из источников (${sourceSummary}) предоставляются куратором от ${partnerTitle} (${contactFio}).`
       }));
       setTasksList(customizedTasks);
+      showToast('Сформирован базовый проектный шаблон на основе ваших материалов.');
     }
 
     setIsGenerating(false);
     setHasGeneratedTasks(true);
     setActiveVariantIdx(0);
-    showToast('Шаблон верификации Добро.рф успешно заполнен!');
 
     setTimeout(() => {
       templateSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
