@@ -1,5 +1,5 @@
 // api/generate.js
-// Серверная функция Vercel Serverless для автономной генерации задач Добро.рф через GigaChat (Сбер) / Gemini API
+// Серверная функция Vercel Serverless для автономной генерации задач Добро.рф через GigaChat (Сбер)
 import https from 'https';
 import crypto from 'crypto';
 
@@ -23,6 +23,42 @@ const DOBRO_DIRECTIONS = [
   '#вклад_в_будущее',
   '#расскажи_о_главном'
 ];
+
+export const DEFAULT_SYSTEM_PROMPT = `Ты — ведущий эксперт Проектного офиса программы «Обучение служением» РАНХиГС (Президентская академия) и федеральный методолог платформы Добро.рф.
+Твоя задача: упаковать материалы социального партнера в ровно 3 разноплановых варианта студенческих проектов строго под анкету платформы Добро.рф:
+1. Вариант 1 (Аналитика/исследование) — полевые/кабинетные исследования, аудит потребностей, аналитический отчет.
+2. Вариант 2 (Прикладной цифровой продукт) — база данных, чат-бот, портал, регламент, интерактивная карта, цифровой сервис.
+3. Вариант 3 (Медиа/просвещение/событие) — просветительская акция, организация мероприятия, медиасопровождение.
+
+ПРАВИЛА ВЫБОРА НАПРАВЛЕНИЙ (ТЕГОВ) ДОБРО.РФ:
+В поле 'directions' укажи от 1 до 3 тегов СТРОГО с символом # из официального списка с учетом специфики:
+- #сохраняй_природу: защита природы, животные, зооволонтерство, сельское хозяйство, фермы, экология.
+- #развивай_среду: благоустройство, городская и сельская среда, территориальное развитие.
+- #создавай_возможности: образование, наука, цифровые сервисы, развитие талантов и компетенций.
+- #будь_здоров: здравоохранение, донорство, ЗОЖ, помощь больным и паллиативная забота.
+- #стирай_границы: инклюзия, поддержка людей с ОВЗ и инвалидностью.
+- #защищай: правовая защита, безопасность, юриспруденция.
+- #МЫВМЕСТЕ: помощь семьям в трудной ситуации, ветеранам, общественная поддержка.
+- #объединяй: межкультурный диалог, объединение сообществ, межрегиональные связи.
+- #делись_опытом: наставничество, передача практических навыков.
+- #вклад_в_будущее: профориентация, молодежные инициативы, поддержка детей.
+- #расскажи_о_главном: медиаволонтерство, инфографика, просветительские кампании в СМИ и соцсетях.
+- #помни: патриотическое воспитание, историческая память, сохранение наследия.
+- #открывай_страну: краеведение, внутренний туризм, экспедиции.
+
+ОТВЕТ ДОЛЖЕН БЫТЬ СТРОГО В ФОРМАТЕ JSON — МАССИВ ИЗ 3 ОБЪЕКТОВ. Без markdown-тегов, без лишних слов.
+Каждый объект массива обязан содержать ровно следующие ключи:
+- "variantLabel": "Вариант 1" (или "Вариант 2", "Вариант 3")
+- "task_title": краткое емкое название строго до 120 символов
+- "directions": массив от 1 до 3 хэштегов из списка выше
+- "task_description": подробное описание социальной проблемы и задачи студентов (до 2000 символов)
+- "target_audience": благополучатели (например: дети с ОВЗ, ветераны, пожилые граждане)
+- "expected_product": конкретный прикладной результат (цифровой сервис, аналитический отчет, программа)
+- "region": "Москва" (или указанный регион)
+- "participation_format": "Онлайн" | "Очный" | "Гибридный"
+- "edu_institution_type": "Высшее учебное заведение"
+- "ready_for_on_site": false (или true)
+- "additional_info": требования к студентам и компетенциям`;
 
 // Получение OAuth-токена GigaChat
 async function getGigaChatToken(authKey, scope = 'GIGACHAT_API_PERS') {
@@ -68,6 +104,43 @@ async function getGigaChatToken(authKey, scope = 'GIGACHAT_API_PERS') {
   });
 }
 
+// Запрос баланса аккаунта GigaChat
+async function getGigaChatBalance(accessToken) {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'gigachat.devices.sberbank.ru',
+      port: 443,
+      path: '/api/v1/balance',
+      method: 'GET',
+      agent: sberAgent,
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const parsed = JSON.parse(data);
+            resolve(parsed.balance || []);
+          } catch (e) {
+            resolve([]);
+          }
+        } else {
+          resolve([]);
+        }
+      });
+    });
+
+    req.on('error', () => resolve([]));
+    req.end();
+  });
+}
+
 // Вызов Chat Completions GigaChat
 async function callGigaChatCompletions(accessToken, messages, model = 'GigaChat') {
   return new Promise((resolve, reject) => {
@@ -99,7 +172,11 @@ async function callGigaChatCompletions(accessToken, messages, model = 'GigaChat'
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
             const parsed = JSON.parse(data);
-            resolve(parsed.choices?.[0]?.message?.content || '');
+            resolve({
+              content: parsed.choices?.[0]?.message?.content || '',
+              usage: parsed.usage || null,
+              raw: parsed
+            });
           } catch (e) {
             reject(new Error(`Ошибка парсинга ответа GigaChat: ${e.message}`));
           }
@@ -129,19 +206,38 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  const gigachatKey = process.env.GIGACHAT_AUTH_KEY || 'MDFhMjAyZWEtMjY3NC03MTUyLWI1ODMtMzljZWQwOTFhY2UzOmUzMzVlZTUxLTFmZWUtNGMzYi1iZGY4LTdhZGIyZGJiNWVhNA==';
+  const gigachatScope = process.env.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS';
+
+  // GET запрос: получение баланса токенов и стандартного системного промпта для консоли разработчика
+  if (req.method === 'GET') {
+    try {
+      const token = await getGigaChatToken(gigachatKey, gigachatScope);
+      const balance = await getGigaChatBalance(token);
+      return res.status(200).json({
+        status: 'success',
+        balance,
+        defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT
+      });
+    } catch (error) {
+      console.error('Ошибка GET /api/generate (баланс):', error);
+      return res.status(500).json({ error: error.message || 'Ошибка получения статуса' });
+    }
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const gigachatKey = process.env.GIGACHAT_AUTH_KEY || 'MDFhMjAyZWEtMjY3NC03MTUyLWI1ODMtMzljZWQwOTFhY2UzOmUzMzVlZTUxLTFmZWUtNGMzYi1iZGY4LTdhZGIyZGJiNWVhNA==';
-  const gigachatScope = process.env.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS';
+  const startTime = Date.now();
 
   try {
     const {
       orgName = 'Социальный партнер',
       contactFio = 'Представитель организации',
       promptText = '',
-      sources = []
+      sources = [],
+      customSystemPrompt = ''
     } = req.body || {};
 
     // Собираем контекст из текста и материалов
@@ -158,41 +254,10 @@ export default async function handler(req, res) {
       materialsText = 'Разработка социально-ориентированного проекта в рамках программы «Обучение служением» Президентской академии.';
     }
 
-    const systemPrompt = `Ты — ведущий эксперт Проектного офиса программы «Обучение служением» РАНХиГС (Президентская академия) и федеральный методолог платформы Добро.рф.
-Твоя задача: упаковать материалы социального партнера в ровно 3 разноплановых варианта студенческих проектов строго под анкету платформы Добро.рф:
-1. Вариант 1 (Аналитика/исследование) — полевые/кабинетные исследования, аудит потребностей, аналитический отчет.
-2. Вариант 2 (Прикладной цифровой продукт) — база данных, чат-бот, портал, регламент, интерактивная карта, цифровой сервис.
-3. Вариант 3 (Медиа/просвещение/событие) — просветительская акция, организация мероприятия, медиасопровождение.
-
-ПРАВИЛА ВЫБОРА НАПРАВЛЕНИЙ (ТЕГОВ) ДОБРО.РФ:
-В поле 'directions' укажи от 1 до 3 тегов СТРОГО с символом # из официального списка с учетом специфики:
-- #сохраняй_природу: защита природы, животные, зооволонтерство, сельское хозяйство, фермы, экология.
-- #развивай_среду: благоустройство, городская и сельская среда, территориальное развитие.
-- #создавай_возможности: образование, наука, цифровые сервисы, развитие талантов и компетенций.
-- #будь_здоров: здравоохранение, донорство, ЗОЖ, помощь больным и паллиативная забота.
-- #стирай_границы: инклюзия, поддержка людей с ОВЗ и инвалидностью.
-- #защищай: правовая защита, безопасность, юриспруденция.
-- #МЫВМЕСТЕ: помощь семьям в трудной ситуации, ветеранам, общественная поддержка.
-- #объединяй: межкультурный диалог, объединение сообществ, межрегиональные связи.
-- #делись_опытом: наставничество, передача практических навыков.
-- #вклад_в_будущее: профориентация, молодежные инициативы, поддержка детей.
-- #расскажи_о_главном: медиаволонтерство, инфографика, просветительские кампании в СМИ и соцсетях.
-- #помни: патриотическое воспитание, историческая память, сохранение наследия.
-- #открывай_страну: краеведение, внутренний туризм, экспедиции.
-
-ОТВЕТ ДОЛЖЕН БЫТЬ СТРОГО В ФОРМАТЕ JSON — МАССИВ ИЗ 3 ОБЪЕКТОВ. Без markdown-тегов, без лишних слов.
-Каждый объект массива обязан содержать ровно следующие ключи:
-- "variantLabel": "Вариант 1" (или "Вариант 2", "Вариант 3")
-- "task_title": краткое емкое название строго до 120 символов
-- "directions": массив от 1 до 3 хэштегов из списка выше
-- "task_description": подробное описание социальной проблемы и задачи студентов (до 2000 символов)
-- "target_audience": благополучатели (например: дети с ОВЗ, ветераны, пожилые граждане)
-- "expected_product": конкретный прикладной результат (цифровой сервис, аналитический отчет, программа)
-- "region": "Москва" (или указанный регион)
-- "participation_format": "Онлайн" | "Очный" | "Гибридный"
-- "edu_institution_type": "Высшее учебное заведение"
-- "ready_for_on_site": false (или true)
-- "additional_info": требования к студентам и компетенциям`;
+    // Использование кастомного системного промпта из консоли разработчика (или дефолтного)
+    const activeSystemPrompt = (customSystemPrompt && customSystemPrompt.trim())
+      ? customSystemPrompt.trim()
+      : DEFAULT_SYSTEM_PROMPT;
 
     const userPrompt = `Организация: ${orgName}
 Куратор/ФИО: ${contactFio}
@@ -203,13 +268,21 @@ ${materialsText}`;
     const token = await getGigaChatToken(gigachatKey, gigachatScope);
 
     // 2. Делаем запрос к GigaChat
-    const rawAiResponse = await callGigaChatCompletions(token, [
-      { role: 'system', content: systemPrompt },
+    const aiResult = await callGigaChatCompletions(token, [
+      { role: 'system', content: activeSystemPrompt },
       { role: 'user', content: userPrompt }
     ]);
 
-    // 3. Извлекаем JSON из ответа
-    let jsonStr = rawAiResponse.trim();
+    // 3. Параллельно получаем актуальный остаток токенов
+    let balanceData = [];
+    try {
+      balanceData = await getGigaChatBalance(token);
+    } catch (bErr) {
+      console.warn('Не удалось обновить баланс токенов:', bErr);
+    }
+
+    // 4. Извлекаем JSON из ответа
+    let jsonStr = (aiResult.content || '').trim();
     if (jsonStr.startsWith('```json')) {
       jsonStr = jsonStr.replace(/^```json/, '').replace(/```$/, '').trim();
     } else if (jsonStr.startsWith('```')) {
@@ -256,15 +329,23 @@ ${materialsText}`;
       };
     });
 
+    const durationMs = Date.now() - startTime;
+
     return res.status(200).json({
       status: 'success',
       provider: 'gigachat-cloud',
-      tasks: normalizedTasks
+      tasks: normalizedTasks,
+      usage: aiResult.usage || null,
+      balance: balanceData,
+      durationMs,
+      systemPromptUsed: activeSystemPrompt,
+      rawContent: aiResult.content
     });
   } catch (error) {
     console.error('Ошибка генерации задач GigaChat Serverless:', error);
     return res.status(500).json({
-      error: error.message || 'Ошибка генерации задач'
+      error: error.message || 'Ошибка генерации задач',
+      durationMs: Date.now() - startTime
     });
   }
 }

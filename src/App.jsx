@@ -1,5 +1,6 @@
 import { extractTextFromFile } from './utils/fileExtractor';
 import React, { useState, useEffect, useRef } from 'react';
+import DevConsoleModal, { DEFAULT_SYSTEM_PROMPT } from './components/DevConsoleModal';
 import {
   Sparkles,
   Mic,
@@ -45,7 +46,8 @@ import {
   AudioLines,
   Settings,
   ArrowRight,
-  Shield
+  Shield,
+  Terminal
 } from 'lucide-react';
 
 import ranepaCrest from './assets/ranepa_crest.png';
@@ -567,6 +569,93 @@ export default function App() {
   const [difyPingStatus, setDifyPingStatus] = useState(null); // 'checking' | 'ok' | 'error' | null
   const [adminTab, setAdminTab] = useState('texts'); // 'texts' | 'dify'
 
+  // Консоль разработчика (Остаток токенов, Системный промпт, История запросов)
+  const [devConsoleOpen, setDevConsoleOpen] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState(() => {
+    try {
+      return localStorage.getItem('dev_system_prompt') || DEFAULT_SYSTEM_PROMPT;
+    } catch (e) {
+      return DEFAULT_SYSTEM_PROMPT;
+    }
+  });
+  const [balanceList, setBalanceList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dev_gigachat_balance');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [requestHistory, setRequestHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dev_request_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const fetchBalance = async () => {
+    setIsLoadingBalance(true);
+    try {
+      const res = await fetch('/api/balance');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.balance)) {
+          setBalanceList(data.balance);
+          try {
+            localStorage.setItem('dev_gigachat_balance', JSON.stringify(data.balance));
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('Ошибка запроса баланса токенов:', e);
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBalance();
+  }, []);
+
+  const handleSaveSystemPrompt = (newPrompt) => {
+    setSystemPrompt(newPrompt);
+    try {
+      localStorage.setItem('dev_system_prompt', newPrompt);
+    } catch (e) {}
+    showToast('Системный промпт сохранен для всей системы!');
+  };
+
+  const handleResetSystemPrompt = () => {
+    setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
+    try {
+      localStorage.removeItem('dev_system_prompt');
+    } catch (e) {}
+    showToast('Системный промпт сброшен к стандарту РАНХиГС');
+  };
+
+  const handleClearHistory = () => {
+    setRequestHistory([]);
+    try {
+      localStorage.removeItem('dev_request_history');
+    } catch (e) {}
+    showToast('История запросов очищена');
+  };
+
+  const handleRestoreFromHistory = (historicalTasks) => {
+    if (Array.isArray(historicalTasks) && historicalTasks.length > 0) {
+      setTasksList(historicalTasks);
+      setActiveVariantIdx(0);
+      setHasGeneratedTasks(true);
+      showToast('Задачи успешно восстановлены из истории!');
+      setTimeout(() => {
+        templateSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  };
+
   // Текстовый ввод пользователя и меню (формат ввода как на скриншоте)
   const [promptText, setPromptText] = useState('');
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
@@ -1050,14 +1139,49 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
           contactPhone,
           contactEmail,
           promptText,
-          sources
+          sources,
+          customSystemPrompt: systemPrompt
         })
       });
 
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data.tasks) && data.tasks.length > 0) {
-          return normalizeTasks(data.tasks);
+          const normalized = normalizeTasks(data.tasks);
+
+          // Обновление живого баланса токенов
+          if (Array.isArray(data.balance) && data.balance.length > 0) {
+            setBalanceList(data.balance);
+            try {
+              localStorage.setItem('dev_gigachat_balance', JSON.stringify(data.balance));
+            } catch (e) {}
+          }
+
+          // Логирование в историю запросов для консоли разработчика
+          const historyItem = {
+            id: `req-${Date.now()}`,
+            timestamp: new Date().toLocaleString('ru-RU'),
+            status: 'success',
+            durationMs: data.durationMs || 1500,
+            orgName: effectiveOrg,
+            contactFio: effectiveFio,
+            promptText: promptText || 'Запрос декомпозиции',
+            sources: [...sources],
+            usage: data.usage || null,
+            systemPrompt: data.systemPromptUsed || systemPrompt,
+            tasks: normalized,
+            rawContent: data.rawContent
+          };
+
+          setRequestHistory((prev) => {
+            const nextList = [historyItem, ...prev].slice(0, 50);
+            try {
+              localStorage.setItem('dev_request_history', JSON.stringify(nextList));
+            } catch (e) {}
+            return nextList;
+          });
+
+          return normalized;
         }
       }
     } catch (err) {
@@ -1427,6 +1551,21 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
               >
                 <Sparkles className="w-4 h-4" />
                 <span>Сформировать задачу</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDevConsoleOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition cursor-pointer shadow-2xs"
+                title="Консоль разработчика: остаток токенов, системный промпт, история запросов"
+              >
+                <Terminal className="w-4 h-4 text-[#9E1B32]" />
+                <span className="hidden sm:inline">Консоль Dev</span>
+                {balanceList?.length > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+                    {(Number(balanceList.find((b) => b.usage === 'GigaChat')?.value || 0) / 1000000).toFixed(1)}M
+                  </span>
+                )}
               </button>
             </nav>
           </div>
@@ -3664,6 +3803,21 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
           </div>
         </div>
       )}
+
+      {/* Консоль разработчика РАНХиГС & Добро.рф */}
+      <DevConsoleModal
+        isOpen={devConsoleOpen}
+        onClose={() => setDevConsoleOpen(false)}
+        systemPrompt={systemPrompt}
+        onSaveSystemPrompt={handleSaveSystemPrompt}
+        onResetSystemPrompt={handleResetSystemPrompt}
+        balanceList={balanceList}
+        isLoadingBalance={isLoadingBalance}
+        onRefreshBalance={fetchBalance}
+        requestHistory={requestHistory}
+        onClearHistory={handleClearHistory}
+        onRestoreFromHistory={handleRestoreFromHistory}
+      />
     </div>
   );
 }
