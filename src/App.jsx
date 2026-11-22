@@ -1,3 +1,4 @@
+import { extractTextFromFile } from './utils/fileExtractor';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
@@ -681,42 +682,67 @@ export default function App() {
       reader.readAsDataURL(file);
     });
 
-  // Загрузка реальных файлов в источники (Кнопка 1: «Загрузить в источники»)
+  // Загрузка реальных файлов в источники (PDF, DOCX, TXT, презентации, аудио)
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
+    showToast(`Идет чтение и извлечение текста из ${files.length} файл(ов)...`);
     const newSources = [];
+
     for (const file of files.slice(0, 15)) {
-      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const fileName = file.name.toLowerCase();
+
+      // А) Аудиофайлы (записи встреч, голосовые сообщения: .mp3, .wav, .m4a, .ogg)
+      if (fileName.endsWith('.mp3') || fileName.endsWith('.wav') || fileName.endsWith('.ogg') || fileName.endsWith('.m4a')) {
+        let transcript = '';
         try {
-          const base64Data = await fileToBase64(file);
-          newSources.push({
-            id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            type: 'file',
-            title: file.name,
-            mimeType: 'application/pdf',
-            base64Data,
-            meta: `PDF · ${(file.size / (1024 * 1024)).toFixed(1)} МБ`,
-            content: `Прикреплен PDF-документ: ${file.name}`
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('model', 'whisper-1');
+          formData.append('language', 'ru');
+          const whisperResp = await fetch('http://localhost:9000/v1/audio/transcriptions', {
+            method: 'POST',
+            body: formData
           });
-        } catch (err) {
-          console.error('Ошибка кодирования PDF:', err);
+          if (whisperResp.ok) {
+            const whisperJson = await whisperResp.json();
+            transcript = whisperJson.text || '';
+          }
+        } catch (whisperErr) {
+          console.warn('Локальный Whisper недоступен:', whisperErr.message);
         }
-      } else {
+
+        newSources.push({
+          id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'voice',
+          title: file.name,
+          meta: `Аудиозапись · ${(file.size / (1024 * 1024)).toFixed(1)} МБ`,
+          content: transcript ? `Расшифровка аудиозаписи (${file.name}):
+${transcript}` : `Аудиозапись: ${file.name} (ожидает расшифровки)`
+        });
+      }
+      // Б) Документы: PDF, DOCX, TXT, Markdown, CSV
+      else {
         let extractedText = '';
         try {
-          extractedText = await file.text();
+          extractedText = await extractTextFromFile(file);
         } catch (err) {
-          extractedText = `Документ организации: ${file.name} (${(file.size / 1024).toFixed(1)} КБ).`;
+          console.warn('Ошибка извлечения текста:', err);
         }
+
+        const sizeKb = (file.size / 1024).toFixed(0);
+        let docType = 'Документ';
+        if (fileName.endsWith('.pdf')) docType = 'Презентация / PDF';
+        else if (fileName.endsWith('.docx')) docType = 'Word / DOCX';
 
         newSources.push({
           id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           type: 'file',
           title: file.name,
-          meta: `Документ · ${(file.size / 1024).toFixed(0)} КБ`,
-          content: (extractedText || `Документ: ${file.name}`).slice(0, 15000)
+          meta: `${docType} · ${sizeKb} КБ (${extractedText ? extractedText.length + ' симв.' : 'файл'})`,
+          content: extractedText ? `Материалы из файла ${file.name}:
+${extractedText.slice(0, 20000)}` : `Файл организации: ${file.name}`
         });
       }
     }
@@ -724,7 +750,7 @@ export default function App() {
     setSources((prev) => [...prev, ...newSources].slice(0, 20));
     setSourceModalOpen(false);
     setValidationError('');
-    showToast(`Добавлено в источники файлов: ${newSources.length}`);
+    showToast(`Успешно обработано файлов: ${newSources.length}. Текст извлечен и готов к анализу!`);
   };
 
   // Добавление ссылки или материала в окно «Загрузить в источники»
