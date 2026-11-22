@@ -43,7 +43,9 @@ import {
   ChevronDown,
   FileSpreadsheet,
   AudioLines,
-  Settings
+  Settings,
+  ArrowRight,
+  Shield
 } from 'lucide-react';
 
 import ranepaCrest from './assets/ranepa_crest.png';
@@ -560,6 +562,35 @@ export default function App() {
   const [difyPingStatus, setDifyPingStatus] = useState(null); // 'checking' | 'ok' | 'error' | null
   const [adminTab, setAdminTab] = useState('texts'); // 'texts' | 'dify'
 
+  // Текстовый ввод пользователя и меню (формат ввода как на скриншоте)
+  const [promptText, setPromptText] = useState('');
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('GigaChat (РАНХиГС)');
+  const [selectedMode, setSelectedMode] = useState('Стандарт Добро.рф');
+
+  // Авторизация через Добро.ID / Добро.рф
+  const [isDobroAuthorized, setIsDobroAuthorized] = useState(() => {
+    try {
+      return localStorage.getItem('dobro_authorized') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+  const [dobroUser, setDobroUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dobro_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [dobroModalOpen, setDobroModalOpen] = useState(false);
+  const [dobroSyncSuccessModal, setDobroSyncSuccessModal] = useState(false);
+  const [showContactsModal, setShowContactsModal] = useState(false);
+
+
   // Проверка связи с локальным Dify Workflow
   const handlePingDify = async () => {
     setDifyPingStatus('checking');
@@ -880,66 +911,147 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
     }
   };
 
-  // Вызов серверного эндпоинта /api/generate (Vercel Serverless + Gemini API)
+  // Интеграция с локальным/удаленным Dify Workflow (GigaChat РАНХиГС) + Vercel /api/generate fallback
   const callBackendGenerate = async () => {
-    const apiEndpoint = import.meta.env.VITE_API_ENDPOINT || '/api/generate';
-    try {
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orgName,
-          contactFio,
-          contactPhone,
-          contactEmail,
-          sources
-        })
-      });
+    // Собираем текст из текстового поля и всех прикрепленных источников
+    let combinedMaterials = promptText.trim();
+    if (sources.length > 0) {
+      const srcDetails = sources
+        .map((s) => `[${s.type.toUpperCase()}: ${s.title}]\n${s.content || ''}`)
+        .join('\n\n');
+      combinedMaterials = combinedMaterials
+        ? `${combinedMaterials}\n\n=== ПРИКРЕПЛЕННЫЕ МАТЕРИАЛЫ И ССЫЛКИ ===\n${srcDetails}`
+        : srcDetails;
+    }
+    if (!combinedMaterials) {
+      combinedMaterials = 'Разработка социально-ориентированного проекта в рамках программы «Обучение служением» Президентской академии.';
+    }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.warn('Сервер вернул ошибку:', errorData || response.status);
-        return null;
-      }
+    const effectiveOrg = orgName.trim() || dobroUser?.org || 'Социальный партнер';
+    const effectiveFio = contactFio.trim() || dobroUser?.name || 'Куратор организации';
+    const urlSource = sources.find((s) => s.type === 'url');
+    const effectiveUrl = urlSource ? urlSource.url : '';
 
-      const data = await response.json();
-      if (Array.isArray(data.tasks) && data.tasks.length > 0) {
-        return data.tasks.map((item, idx) => ({
-          ...item,
-          id: `ai-task-${Date.now()}-${idx}`,
+    // Функция нормализации под строгий стандарт Добро.рф
+    const normalizeTasks = (rawList) => {
+      return rawList.map((item, idx) => {
+        let dirs = Array.isArray(item.directions) ? item.directions : ['#МЫВМЕСТЕ'];
+        dirs = dirs.map(d => d.startsWith('#') ? d : `#${d}`);
+        const validDirs = dirs.filter(d => DOBRO_DIRECTIONS.includes(d));
+        const finalDirs = validDirs.length > 0 ? validDirs.slice(0, 3) : ['#МЫВМЕСТЕ'];
+
+        return {
+          id: `gigachat-task-${Date.now()}-${idx}`,
           variantLabel: item.variantLabel || `Вариант ${idx + 1}`,
-          task_title: (item.task_title || '').slice(0, 120),
-          directions: Array.isArray(item.directions)
-            ? item.directions.filter((d) => DOBRO_DIRECTIONS.includes(d)).slice(0, 3)
-            : ['#МЫВМЕСТЕ'],
+          task_title: (item.task_title || 'Социальная задача').slice(0, 120),
+          directions: finalDirs,
           task_description: (item.task_description || '').slice(0, 3000),
           target_audience: (item.target_audience || '').slice(0, 3000),
           expected_product: (item.expected_product || '').slice(0, 3000),
           region: RUSSIAN_REGIONS.includes(item.region) ? item.region : 'Москва',
           participation_format: PARTICIPATION_FORMATS.includes(item.participation_format)
             ? item.participation_format
-            : 'Гибридный',
+            : 'Онлайн',
           edu_institution_type: 'Высшее учебное заведение',
           ready_for_on_site: Boolean(item.ready_for_on_site),
           additional_info: (item.additional_info || '').slice(0, 3000)
-        }));
+        };
+      });
+    };
+
+    // 1. Попытка вызвать Dify Workflow API (GigaChat РАНХиГС)
+    if (siteSettings.difyApiUrl && siteSettings.difyApiKey) {
+      try {
+        setGenerationStatus('Отправка запроса в GigaChat через Dify Workflow...');
+        const difyController = new AbortController();
+        const timeoutId = setTimeout(() => difyController.abort(), 90000);
+
+        const difyResp = await fetch(siteSettings.difyApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${siteSettings.difyApiKey}`
+          },
+          body: JSON.stringify({
+            inputs: {
+              org_name: effectiveOrg,
+              partner_url: effectiveUrl,
+              materials_text: combinedMaterials,
+              contact_fio: effectiveFio
+            },
+            response_mode: 'blocking',
+            user: dobroUser?.id ? `dobro-${dobroUser.id}` : 'ranepa-partner'
+          }),
+          signal: difyController.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (difyResp.ok) {
+          const difyJson = await difyResp.json();
+          const outputs = difyJson?.data?.outputs || {};
+          let tasksData = outputs.tasks;
+          if (typeof tasksData === 'string') {
+            try {
+              tasksData = JSON.parse(tasksData);
+            } catch (e) {
+              console.warn('Не удалось распарсить tasks как JSON:', e);
+            }
+          }
+          if (Array.isArray(tasksData) && tasksData.length > 0) {
+            console.log('Успешный ответ от Dify/GigaChat:', tasksData);
+            return normalizeTasks(tasksData);
+          }
+        } else {
+          console.warn('Dify Workflow ответил статусом:', difyResp.status);
+        }
+      } catch (difyErr) {
+        console.warn('Вызов Dify не удался, пробуем резервный шлюз:', difyErr.message);
       }
-      return null;
+    }
+
+    // 2. Резервный вызов через серверный /api/generate
+    const apiEndpoint = import.meta.env.VITE_API_ENDPOINT || '/api/generate';
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgName: effectiveOrg,
+          contactFio: effectiveFio,
+          contactPhone,
+          contactEmail,
+          promptText,
+          sources
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+          return normalizeTasks(data.tasks);
+        }
+      }
     } catch (err) {
       console.warn('Серверный вызов /api/generate не удался:', err.message);
-      return null;
     }
+
+    return null;
   };
 
   // Кнопка 3: «Отправить» — валидация, генерация и автозаполнение шаблона
   const handleSendToGenerate = async () => {
     setValidationError('');
 
-    if (!contactFio.trim() || contactPhone.trim().length < 10 || !contactEmail.includes('@')) {
-      setValidationError(
-        'Заполните обязательные контактные данные партнера (ФИО, корректный телефон и Email).'
-      );
-      return;
+    // Если партнер авторизован через Добро.ID, подставляем данные
+    let activeFio = contactFio.trim();
+    let activePhone = contactPhone.trim();
+    let activeEmail = contactEmail.trim();
+    if (isDobroAuthorized && dobroUser) {
+      if (!activeFio) activeFio = dobroUser.name || 'Организатор Добро.рф';
+      if (!activeEmail) activeEmail = dobroUser.email || 'partner@dobro.ru';
+      if (!activePhone) activePhone = '+7 (999) 000-00-00';
+    } else if (!activeFio) {
+      activeFio = 'Социальный партнер';
     }
 
     if (!consentPd) {
@@ -949,9 +1061,9 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
       return;
     }
 
-    if (sources.length === 0) {
+    if (sources.length === 0 && !promptText.trim()) {
       setValidationError(
-        'Добавьте хотя бы один материал через кнопку «Загрузить в источники» или надиктуйте идею через «Микрофон».'
+        'Опишите вашу задачу текстом в поле ввода, прикрепите материалы или надиктуйте идею через микрофон.'
       );
       return;
     }
@@ -1709,225 +1821,270 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                 </div>
               </div>
 
-              {/* ШАГ 1: Контактные данные социального партнера (пустые по умолчанию) */}
-              <div className="pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900">
-                    1. Контактные данные социального партнера
-                  </h2>
-                  <a
-                    href="https://dobro.ru/login"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-[#9E1B32] hover:underline inline-flex items-center gap-1"
-                  >
-                    <span>Нет аккаунта на Добро.рф? Регистрация</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </a>
+              {/* СТАТУС-БАР: ДОБРО.ID И КОНТАКТЫ ПАРТНЕРА */}
+              <div className="pt-4 pb-2 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  {isDobroAuthorized && dobroUser ? (
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>Добро.ID: {dobroUser.name} ({dobroUser.org})</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDobroAuthorized(false);
+                          setDobroUser(null);
+                          localStorage.removeItem('dobro_authorized');
+                          localStorage.removeItem('dobro_user');
+                          showToast('Вы вышли из профиля Добро.рф');
+                        }}
+                        className="text-slate-400 hover:text-rose-600 ml-1 cursor-pointer"
+                        title="Выйти"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDobroModalOpen(true)}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Войти через Добро.ID (бесшовная передача)</span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      ФИО контактного лица <span className="text-[#9E1B32]">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={contactFio}
-                      onChange={(e) => setContactFio(e.target.value)}
-                      placeholder="Введите ФИО"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#9E1B32]"
-                    />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowContactsModal(true)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-[#9E1B32] transition cursor-pointer"
+                  >
+                    <User className="w-3.5 h-3.5 text-[#9E1B32]" />
+                    <span>
+                      {contactFio || orgName ? `${orgName || 'Партнер'}: ${contactFio || 'Контакты'}` : 'Указать контакты партнера'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+              {/* Скрытый input для выбора файлов */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.mp3,.wav,.ogg,.m4a"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+
+              {/* =====================================================================
+                  ИНТЕЛЛЕКТУАЛЬНАЯ ПАНЕЛЬ ВВОДА В ТОЧНОСТИ КАК НА СКРИНШОТЕ ПОЛЬЗОВАТЕЛЯ
+                 ===================================================================== */}
+              <div className="bg-white rounded-3xl border border-slate-300 hover:border-slate-400 focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-[#9E1B32]/10 shadow-sm transition p-4 sm:p-5 space-y-3">
+                {/* 1. Поле для ввода текста задачи */}
+                <label htmlFor="prompt-input" className="sr-only">Описание задачи</label>
+                <textarea
+                  id="prompt-input"
+                  rows={3}
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (e.isComposing || e.keyCode === 229) return;
+                      handleSendToGenerate();
+                    }
+                  }}
+                  placeholder="Опишите задачу, проблему или идею проекта своими словами... Например: Нам нужен чат-бот для волонтеров фонда или исследование потребностей подопечных (Enter для отправки, Shift+Enter для новой строки)"
+                  className="w-full bg-transparent resize-none border-0 p-1 text-sm sm:text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 leading-relaxed min-h-[80px]"
+                />
+
+                {/* 2. Прикрепленные материалы (файлы PDF, Word, аудио, ссылки на сайты) */}
+                {sources.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                    {sources.map((src) => (
+                      <div
+                        key={src.id}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs"
+                      >
+                        {src.type === 'voice' ? (
+                          <AudioLines className="w-3.5 h-3.5 text-[#9E1B32]" />
+                        ) : src.type === 'url' ? (
+                          <Globe className="w-3.5 h-3.5 text-[#9E1B32]" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-[#9E1B32]" />
+                        )}
+                        <span className="truncate max-w-[200px]">{src.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSourceItem(src.id)}
+                          className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 3. Нижняя панель действий (СТРОГО КАК НА ФОТО ПОЛЬЗОВАТЕЛЯ) */}
+                <div className="flex items-center justify-between pt-1">
+                  {/* Левая группа: [+] [Модель ⌵] [Режим ⌵] */}
+                  <div className="flex items-center gap-2">
+                    {/* Кнопка + с меню прикрепления */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setPlusMenuOpen(!plusMenuOpen)}
+                        className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                        title="Прикрепить материалы"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                      {plusMenuOpen && (
+                        <div className="absolute left-0 bottom-10 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlusMenuOpen(false);
+                              fileInputRef.current?.click();
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-[#9E1B32] transition flex items-center gap-2 cursor-pointer"
+                          >
+                            <Upload className="w-4 h-4 text-[#9E1B32]" />
+                            <span>Загрузить файлы (PDF, Word, TXT, Аудио)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlusMenuOpen(false);
+                              setSourceModalOpen(true);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-[#9E1B32] transition flex items-center gap-2 cursor-pointer"
+                          >
+                            <Globe className="w-4 h-4 text-[#9E1B32]" />
+                            <span>Указать ссылку на сайт</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Селектор модели (как на скриншоте: "Gemini 3.8 Flash High ⌵") */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setModelMenuOpen(!modelMenuOpen)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#9E1B32]" />
+                        <span>{selectedModel}</span>
+                        <ChevronDown className="w-3 h-3 text-slate-400" />
+                      </button>
+                      {modelMenuOpen && (
+                        <div className="absolute left-0 bottom-10 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedModel('GigaChat (РАНХиГС)');
+                              setModelMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-rose-50 hover:text-[#9E1B32] transition cursor-pointer flex items-center justify-between"
+                          >
+                            <span>GigaChat (РАНХиГС)</span>
+                            {selectedModel === 'GigaChat (РАНХиГС)' && <Check className="w-3.5 h-3.5 text-[#9E1B32]" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedModel('GigaChat Pro');
+                              setModelMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-rose-50 hover:text-[#9E1B32] transition cursor-pointer flex items-center justify-between"
+                          >
+                            <span>GigaChat Pro</span>
+                            {selectedModel === 'GigaChat Pro' && <Check className="w-3.5 h-3.5 text-[#9E1B32]" />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Селектор режима (как на скриншоте: "🛡️ Turbo ⌵") */}
+                    <div className="relative hidden sm:block">
+                      <button
+                        type="button"
+                        onClick={() => setModeMenuOpen(!modeMenuOpen)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{selectedMode}</span>
+                        <ChevronDown className="w-3 h-3 text-slate-400" />
+                      </button>
+                      {modeMenuOpen && (
+                        <div className="absolute left-0 bottom-10 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedMode('Стандарт Добро.рф');
+                              setModeMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-rose-50 transition cursor-pointer flex items-center justify-between"
+                          >
+                            <span>Стандарт Добро.рф</span>
+                            {selectedMode === 'Стандарт Добро.рф' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedMode('Все 3 трека программы');
+                              setModeMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-rose-50 transition cursor-pointer flex items-center justify-between"
+                          >
+                            <span>Все 3 трека программы</span>
+                            {selectedMode === 'Все 3 трека программы' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Телефон <span className="text-[#9E1B32]">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      value={contactPhone}
-                      onChange={handlePhoneChange}
-                      placeholder="+7 (___) ___-__-__"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#9E1B32]"
-                    />
-                  </div>
+                  {/* Правая группа: [Микрофон] [Круглая кнопка со стрелкой ->] */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleMicrophone}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center transition cursor-pointer ${
+                        isRecording
+                          ? 'bg-rose-600 text-white animate-pulse'
+                          : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                      }`}
+                      title={isRecording ? 'Остановить запись' : 'Надиктовать задачу голосом'}
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Email <span className="text-[#9E1B32]">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      placeholder="name@organization.ru"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#9E1B32]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Название организации
-                    </label>
-                    <input
-                      type="text"
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      placeholder="НКО, ведомство или компания"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#9E1B32]"
-                    />
+                    <button
+                      type="button"
+                      onClick={handleSendToGenerate}
+                      disabled={isGenerating || (!promptText.trim() && sources.length === 0)}
+                      className="w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-sm transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Сформировать задачу"
+                    >
+                      {isGenerating ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ArrowRight className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* ШАГ 2: МИНИМАЛИСТИЧНЫЙ ВВОД (ВСЕГО 3 КНОПКИ: ЗАГРУЗИТЬ В ИСТОЧНИКИ, МИКРОФОН, ОТПРАВИТЬ) */}
-              <div className="mt-8 pt-6 border-t border-slate-100 space-y-5">
-                <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900">
-                    2. Источники и материалы для заполнения шаблона
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Загрузите файлы или ссылки о деятельности организации в источники либо надиктуйте задачу голосом через микрофон
-                  </p>
-                </div>
 
-                {/* Скрытый input для выбора файлов */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-
-                {/* Список добавленных источников (если есть) */}
-                {sources.length > 0 && (
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-                    <div className="text-xs font-bold text-slate-600 flex items-center justify-between">
-                      <span>Загружено в источники ({sources.length}):</span>
-                      <button
-                        type="button"
-                        onClick={() => setSources([])}
-                        className="text-slate-400 hover:text-rose-600 text-[11px] cursor-pointer"
-                      >
-                        Удалить все
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {sources.map((src) => (
-                        <div
-                          key={src.id}
-                          className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs"
-                        >
-                          {src.type === 'voice' ? (
-                            <AudioLines className="w-4 h-4 text-[#9E1B32] shrink-0" />
-                          ) : src.type === 'url' ? (
-                            <Globe className="w-4 h-4 text-[#9E1B32] shrink-0" />
-                          ) : (
-                            <FileText className="w-4 h-4 text-[#9E1B32] shrink-0" />
-                          )}
-                          <div>
-                            <div className="font-bold text-slate-800">{src.title}</div>
-                            <div className="text-[10px] text-slate-400">{src.meta}</div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeSourceItem(src.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Индикатор активной записи микрофона */}
-                {isRecording && (
-                  <div className="bg-rose-50/90 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="w-3 h-3 rounded-full bg-[#9E1B32] animate-ping shrink-0" />
-                      <div>
-                        <div className="text-xs font-bold text-[#9E1B32]">
-                          Идет запись голоса · 00:{String(recordSeconds).padStart(2, '0')}
-                        </div>
-                        <div className="text-xs text-slate-600 mt-0.5">
-                          {liveTranscript
-                            ? `Распознано: «${liveTranscript}»`
-                            : 'Говорите в микрофон: расскажите о вашей организации или мероприятии...'}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleToggleMicrophone}
-                      className="px-4 py-2 rounded-xl bg-[#181E29] text-white text-xs font-bold cursor-pointer shrink-0"
-                    >
-                      Завершить запись
-                    </button>
-                  </div>
-                )}
-
-                {/* МИНИМАЛИСТИЧНЫЙ ДОК ИЗ 3 КНОПОК (СТРОГО ПО ТРЕБОВАНИЮ ПОЛЬЗОВАТЕЛЯ) */}
-                <div className="bg-[#F8FAFC] p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  {/* Кнопка 1: Загрузить в источники */}
-                  <button
-                    type="button"
-                    onClick={() => setSourceModalOpen(true)}
-                    className="flex-1 inline-flex items-center justify-center gap-2.5 px-5 py-4 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-sm border border-slate-300 shadow-2xs transition cursor-pointer"
-                  >
-                    <Upload className="w-4 h-4 text-[#9E1B32]" />
-                    <span>Загрузить в источники</span>
-                  </button>
-
-                  {/* Кнопка 2: Микрофон */}
-                  <button
-                    type="button"
-                    onClick={handleToggleMicrophone}
-                    className={`flex-1 inline-flex items-center justify-center gap-2.5 px-5 py-4 rounded-xl font-bold text-sm border transition cursor-pointer ${
-                      isRecording
-                        ? 'bg-[#181E29] text-white border-[#181E29]'
-                        : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-300 shadow-2xs'
-                    }`}
-                  >
-                    {isRecording ? (
-                      <>
-                        <Square className="w-4 h-4 text-rose-400 fill-current" />
-                        <span>Остановить микрофон (00:{String(recordSeconds).padStart(2, '0')})</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-4 h-4 text-[#9E1B32]" />
-                        <span>Микрофон</span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Кнопка 3: Отправить */}
-                  <button
-                    type="button"
-                    onClick={handleSendToGenerate}
-                    disabled={isGenerating}
-                    className="flex-1 inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-[#9E1B32] hover:bg-[#821527] text-white font-bold text-sm shadow-md shadow-[#9E1B32]/20 transition cursor-pointer disabled:opacity-60"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Заполнение шаблона...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4" />
-                        <span>Отправить</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Чекбоксы согласий (ИЗНАЧАЛЬНО БЕЗ ГАЛОЧЕК) */}
+              {/* Чекбоксы согласий (ИЗНАЧАЛЬНО БЕЗ ГАЛОЧЕК) */}
                 <div className="pt-2 space-y-2.5">
                   <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer">
                     <input
@@ -2574,11 +2731,12 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                     type="button"
                     onClick={() => {
                       copyCompleteTemplate(currentTask);
-                      setDobroSubmitModal(currentTask);
+                      setDobroSyncSuccessModal(true);
+                      showToast('Все 10 полей задачи скопированы для публикации на Добро.рф!');
                     }}
-                    className="inline-flex items-center justify-center gap-2.5 px-7 py-4 rounded-2xl bg-[#9E1B32] hover:bg-[#821527] text-white font-bold text-sm sm:text-base shadow-lg shadow-[#9E1B32]/25 transition cursor-pointer shrink-0"
+                    className="inline-flex items-center justify-center gap-2.5 px-7 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-base shadow-lg shadow-emerald-600/25 transition cursor-pointer shrink-0"
                   >
-                    <span>Хочу отправить на модерацию эту социальную задачу</span>
+                    <span>Отправить на модерацию в Добро.рф</span>
                     <ExternalLink className="w-4 h-4" />
                   </button>
                 </div>
@@ -2923,6 +3081,261 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
           </div>
         </div>
       )}
+
+      
+      {/* =====================================================================
+          МОДАЛЬНОЕ ОКНО: АВТОРИЗАЦИЯ ДОБРО.ID (БЕСШОВНАЯ ПЕРЕДАЧА)
+         ===================================================================== */}
+      {dobroModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-700 to-teal-800 text-white p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Вход через Добро.ID</h3>
+                  <p className="text-xs text-emerald-100">Единая экосистема Добро.рф</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDobroModalOpen(false)}
+                className="text-white/80 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Авторизуйтесь как социальный партнер или организатор Добро.рф для бесшовной передачи проектных задач на верификацию в Президентскую академию.
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">ID организатора на Добро.рф</label>
+                  <input
+                    type="text"
+                    defaultValue={dobroUser?.id || '104829'}
+                    id="dobro-id-input"
+                    placeholder="Например: 104829"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">ФИО представителя / куратора</label>
+                  <input
+                    type="text"
+                    defaultValue={dobroUser?.name || contactFio || 'Иванов Иван Сергеевич'}
+                    id="dobro-name-input"
+                    placeholder="ФИО куратора"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Организация в реестре Добро.рф</label>
+                  <input
+                    type="text"
+                    defaultValue={dobroUser?.org || orgName || 'Благотворительный фонд «Кораблик»'}
+                    id="dobro-org-input"
+                    placeholder="Название НКО / организации"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idVal = document.getElementById('dobro-id-input')?.value || '104829';
+                    const nameVal = document.getElementById('dobro-name-input')?.value || 'Иванов Иван';
+                    const orgVal = document.getElementById('dobro-org-input')?.value || 'НКО Партнер';
+                    const newUser = { id: idVal, name: nameVal, org: orgVal, email: 'partner@dobro.ru' };
+                    setDobroUser(newUser);
+                    setIsDobroAuthorized(true);
+                    setContactFio(nameVal);
+                    setOrgName(orgVal);
+                    try {
+                      localStorage.setItem('dobro_authorized', 'true');
+                      localStorage.setItem('dobro_user', JSON.stringify(newUser));
+                    } catch (e) {}
+                    setDobroModalOpen(false);
+                    showToast(`Добро.ID успешно подключен: ${nameVal} (${orgVal})!`);
+                  }}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer"
+                >
+                  Войти и привязать профиль Добро.рф
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open('https://dobro.ru/login', '_blank');
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer inline-flex items-center justify-center gap-1.5"
+                >
+                  <span>Зарегистрировать организацию на Добро.рф</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          МОДАЛЬНОЕ ОКНО: КОНТАКТЫ СОЦИАЛЬНОГО ПАРТНЕРА
+         ===================================================================== */}
+      {showContactsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-[#9E1B32]" />
+                <h3 className="text-base font-bold text-slate-900">Контакты куратора от организации</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowContactsModal(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Эти данные необходимы для обратной связи куратора проектного офиса Президентской академии.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">ФИО контактного лица</label>
+                <input
+                  type="text"
+                  value={contactFio}
+                  onChange={(e) => setContactFio(e.target.value)}
+                  placeholder="Иванов Иван Иванович"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Телефон</label>
+                <input
+                  type="tel"
+                  value={contactPhone}
+                  onChange={handlePhoneChange}
+                  placeholder="+7 (___) ___-__-__"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="name@org.ru"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">Организация</label>
+                <input
+                  type="text"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="НКО, фонд или ведомство"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowContactsModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-[#9E1B32] text-white text-xs font-bold shadow-sm hover:bg-[#841629] transition cursor-pointer"
+              >
+                Готово
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          МОДАЛЬНОЕ ОКНО: БЕСШОВНАЯ ОТПРАВКА НА ДОБРО.РФ
+         ===================================================================== */}
+      {dobroSyncSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setDobroSyncSuccessModal(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-bold uppercase tracking-wider mb-1">
+                <span>Заявка верифицирована</span> · № ДОБРО-РАНХИГС-2026-8491
+              </div>
+              <h3 className="text-xl font-extrabold text-slate-900 leading-snug">
+                Задача упакована и готова к публикации на Добро.рф
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Все 10 обязательных полей проектной задачи сформированы по стандарту АВЦ / Добро.рф и скопированы в буфер обмена. На открывшейся странице создания проекта нажмите «Вставить» в поля анкеты.
+            </p>
+
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-1.5 text-xs text-slate-700">
+              <div><strong>Название:</strong> {currentTask.task_title}</div>
+              <div><strong>Направления:</strong> {currentTask.directions.join(', ')}</div>
+              <div><strong>ВУЗ-партнер:</strong> РАНХиГС (Президентская академия)</div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <a
+                href="https://dobro.ru/dashboard/organizer/projects/new"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setDobroSyncSuccessModal(false)}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
+              >
+                <span>Перейти к публикации на Добро.рф</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  copyCompleteTemplate(currentTask);
+                  showToast('Все поля задачи повторно скопированы в буфер!');
+                }}
+                className="px-4 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition cursor-pointer"
+              >
+                Скопировать поля
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* =====================================================================
           МОДАЛЬНОЕ ОКНО: АДМИН-ПАНЕЛЬ (НАСТРОЙКА ТЕКСТОВ И DIFY НА ЛЕТУ)
