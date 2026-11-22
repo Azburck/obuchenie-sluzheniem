@@ -1665,7 +1665,7 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                     </button>
 
                     <a
-                      href="https://dobro.ru/login"
+                      href="https://sl.dobro.ru/"
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-2 px-6 py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm sm:text-base border border-white/20 transition"
@@ -1699,15 +1699,15 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                         Еще нет аккаунта партнера на Добро.рф?
                       </div>
                       <p>
-                        Перед отправкой задачи на модерацию зарегистрируйте профиль вашей организации в экосистеме Добро.рф.
+                        Перед отправкой задачи на модерацию зарегистрируйте профиль вашей организации в реестре организаторов Добро.рф.
                       </p>
                       <a
-                        href="https://dobro.ru/login"
+                        href="https://orgs.dobro.ru/"
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-[#9E1B32] font-bold hover:underline pt-1"
                       >
-                        <span>Перейти к регистрации на Добро.рф</span>
+                        <span>Кабинет организаций на Добро.рф</span>
                         <ArrowUpRight className="w-3.5 h-3.5" />
                       </a>
                     </div>
@@ -3312,13 +3312,13 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
             </p>
             <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
               <a
-                href="https://dobro.ru/login"
+                href="https://sl.dobro.ru/social-tasks"
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setDobroSubmitModal(null)}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#9E1B32] text-white font-bold text-xs sm:text-sm"
               >
-                <span>Открыть платформу Добро.рф</span>
+                <span>Перейти в окно регистрации проекта</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
               <button
@@ -3431,13 +3431,13 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                 </div>
               </div>
 
-              <div className="pt-2 flex flex-col gap-2">
+              <div className="pt-2 flex flex-col gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
-                    const idVal = document.getElementById('dobro-id-input')?.value || '104829';
-                    const nameVal = document.getElementById('dobro-name-input')?.value || 'Иванов Иван';
-                    const orgVal = document.getElementById('dobro-org-input')?.value || 'НКО Партнер';
+                    const idVal = document.getElementById('dobro-id-input')?.value || '93329158';
+                    const nameVal = document.getElementById('dobro-name-input')?.value || 'Харченко Леонид';
+                    const orgVal = document.getElementById('dobro-org-input')?.value || 'Социальный партнер';
                     const newUser = { id: idVal, name: nameVal, org: orgVal, email: 'partner@dobro.ru' };
                     setDobroUser(newUser);
                     setIsDobroAuthorized(true);
@@ -3448,23 +3448,38 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                       localStorage.setItem('dobro_user', JSON.stringify(newUser));
                     } catch (e) {}
                     setDobroModalOpen(false);
-                    showToast(`Добро.ID успешно подключен: ${nameVal} (${orgVal})!`);
+                    showToast(`Добро.ID успешно подключен! Открываем окно регистрации проекта...`);
+                    window.open('https://sl.dobro.ru/social-tasks', '_blank');
                   }}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer"
+                  className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
                 >
-                  Войти и привязать профиль Добро.рф
+                  <span>Войти и перейти в окно регистрации проекта</span>
+                  <ExternalLink className="w-4 h-4" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.open('https://dobro.ru/login', '_blank');
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer inline-flex items-center justify-center gap-1.5"
-                >
-                  <span>Зарегистрировать организацию на Добро.рф</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2 pt-1">
+                  <a
+                    href="https://sl.dobro.ru/social-tasks"
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setDobroModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer inline-flex items-center justify-center gap-1.5"
+                  >
+                    <span>Прямой переход</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <a
+                    href="https://orgs.dobro.ru/"
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setDobroModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer inline-flex items-center justify-center gap-1.5"
+                  >
+                    <span>Кабинет организаций</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -3596,13 +3611,13 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <a
-                href="https://dobro.ru/dashboard/organizer"
+                href="https://sl.dobro.ru/social-tasks"
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setDobroSyncSuccessModal(false)}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
               >
-                <span>Перейти к публикации на Добро.рф</span>
+                <span>Перейти в окно регистрации проекта на Добро.рф</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
 
@@ -3626,6 +3641,18 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
               >
                 Скопировать поля
               </button>
+            </div>
+
+            <div className="pt-2 text-center">
+              <a
+                href="https://orgs.dobro.ru/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-slate-500 hover:text-emerald-700 underline transition inline-flex items-center gap-1"
+              >
+                <span>Нужно сначала зарегистрировать НКО как организатора? Открыть кабинет организаций Добро.рф</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
           </div>
         </div>
