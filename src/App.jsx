@@ -521,6 +521,8 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState('');
+  const isRecordingRef = useRef(false);
+  const transcriptRef = useRef('');
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -839,8 +841,11 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
   }, [isRecording]);
 
   const handleToggleMicrophone = () => {
-    if (isRecording) {
-      // Остановка Web Speech API
+    if (isRecordingRef.current) {
+      // Остановка записи голоса
+      isRecordingRef.current = false;
+      setIsRecording(false);
+
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
@@ -848,137 +853,90 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
         recognitionRef.current = null;
       }
 
-      // Остановка MediaRecorder (аудиопоток)
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch (e) {}
-      }
-
-      setIsRecording(false);
-
-      if (liveTranscript.trim()) {
-        const textToInsert = liveTranscript.trim();
+      const textToInsert = (transcriptRef.current || liveTranscript).trim();
+      if (textToInsert) {
         setPromptText((prev) => (prev ? `${prev} ${textToInsert}` : textToInsert));
         showToast('Надиктованный текст добавлен в поле задачи!');
+      } else {
+        showToast('Голос не был распознан. Попробуйте еще раз.');
       }
+      setLiveTranscript('');
+      transcriptRef.current = '';
       return;
     }
 
-    // Запуск микрофона
-    setValidationError('');
-    setLiveTranscript('');
-    audioChunksRef.current = [];
-
-    // 1. Запрашиваем доступ к микрофону через getUserMedia (работает во всех браузерах: Chrome, Firefox, Edge)
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then((stream) => {
-          setIsRecording(true);
-          showToast('Микрофон активен. Говорите вашу задачу...');
-
-          let mimeType = 'audio/webm';
-          if (typeof MediaRecorder !== 'undefined') {
-            if (!MediaRecorder.isTypeSupported('audio/webm')) {
-              if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
-              else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
-            }
-          }
-
-          const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-          recorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
-              audioChunksRef.current.push(e.data);
-            }
-          };
-
-          recorder.onstop = async () => {
-            stream.getTracks().forEach((track) => track.stop());
-
-            // Если Web Speech API уже выдал текст, Whisper не нужен
-            if (liveTranscript.trim()) {
-              return;
-            }
-
-            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
-            if (audioBlob.size > 1500) {
-              setIsTranscribingAudio(true);
-              try {
-                const formData = new FormData();
-                formData.append('file', audioBlob, 'voice_input.webm');
-                formData.append('model', 'Systran/faster-whisper-small');
-                formData.append('language', 'ru');
-
-                const whisperResp = await fetch('http://localhost:9000/v1/audio/transcriptions', {
-                  method: 'POST',
-                  body: formData
-                });
-
-                if (whisperResp.ok) {
-                  const whisperJson = await whisperResp.json();
-                  if (whisperJson.text && whisperJson.text.trim()) {
-                    const text = whisperJson.text.trim();
-                    setPromptText((prev) => (prev ? `${prev} ${text}` : text));
-                    setLiveTranscript(text);
-                    showToast('Голос успешно расшифрован через Whisper!');
-                  }
-                }
-              } catch (err) {
-                console.warn('Локальный Whisper недоступен:', err);
-              } finally {
-                setIsTranscribingAudio(false);
-              }
-            }
-          };
-
-          recorder.start(500);
-          mediaRecorderRef.current = recorder;
-        })
-        .catch((err) => {
-          console.warn('Ошибка доступа к микрофону:', err);
-          setValidationError(
-            'Доступ к микрофону не предоставлен. Нажмите «Разрешить» в запросе браузера или проверьте настройки микрофона.'
-          );
-          showToast('Разрешите браузеру доступ к микрофону');
-          setIsRecording(false);
-        });
-    }
-
-    // 2. Параллельно запускаем Web Speech API для живого отображения слов на экране (Chrome, Edge, Яндекс)
+    // Запуск микрофона (Web Speech API)
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (SpeechRecognition) {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'ru-RU';
-        recognition.continuous = true;
-        recognition.interimResults = true;
+    if (!SpeechRecognition) {
+      setValidationError(
+        'Ваш браузер не поддерживает распознавание речи Web Speech API. Рекомендуется использовать Google Chrome, Яндекс.Браузер, Microsoft Edge или Safari.'
+      );
+      showToast('Браузер не поддерживает голосовой ввод');
+      return;
+    }
 
-        let accumulatedFinal = '';
-        recognition.onresult = (event) => {
-          let currentInterim = '';
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              accumulatedFinal += event.results[i][0].transcript + ' ';
-            } else {
-              currentInterim += event.results[i][0].transcript;
-            }
+    setValidationError('');
+    setLiveTranscript('');
+    transcriptRef.current = '';
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ru-RU';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        showToast('Микрофон активен. Диктуйте вашу задачу...');
+      };
+
+      recognition.onresult = (event) => {
+        let finalStr = '';
+        let interimStr = '';
+        for (let i = 0; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalStr += event.results[i][0].transcript + ' ';
+          } else {
+            interimStr += event.results[i][0].transcript;
           }
-          const spoken = (accumulatedFinal + currentInterim).trim();
-          setLiveTranscript(spoken);
-        };
+        }
+        const spoken = (finalStr + interimStr).trim();
+        transcriptRef.current = spoken;
+        setLiveTranscript(spoken);
+      };
 
-        recognition.onerror = (e) => {
-          console.warn('Web Speech API error:', e.error);
-        };
+      recognition.onerror = (e) => {
+        console.warn('Web Speech API error:', e.error);
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          setValidationError(
+            'Доступ к микрофону заблокирован в настройках браузера. Пожалуйста, разрешите доступ к микрофону.'
+          );
+          showToast('Разрешите браузеру доступ к микрофону');
+        }
+      };
 
-        recognitionRef.current = recognition;
-        recognition.start();
-      } catch (e) {
-        console.warn('Ошибка запуска SpeechRecognition:', e);
-      }
+      recognition.onend = () => {
+        // Если запись всё еще активна (пользователь не нажал стоп), перезапускаем для непрерывной диктовки
+        if (isRecordingRef.current) {
+          try {
+            recognition.start();
+          } catch (err) {}
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.warn('Ошибка запуска SpeechRecognition:', e);
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      showToast('Не удалось запустить микрофон');
     }
   };
 
