@@ -1366,6 +1366,58 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
     copyFieldToClipboard(fullText, 'copy-all-template', 'Весь шаблон задачи целиком');
   };
 
+  const downloadCompleteTemplate = (task) => {
+    const fullText = [
+      `================================================================================`,
+      `АНКЕТА ВЕРИФИКАЦИИ СОЦИАЛЬНОЙ ЗАДАЧИ ПО СТАНДАРТУ ДОБРО.РФ`,
+      `Федеральная программа «Обучение служением» · Президентская академия (РАНХиГС)`,
+      `================================================================================`,
+      `Организация-партнер: ${orgName || 'Не указана'}`,
+      `Куратор / Контактное лицо: ${contactFio || 'Не указано'}`,
+      `Телефон: ${contactPhone || '—'}`,
+      `Email: ${contactEmail || '—'}`,
+      `Дата формирования: ${new Date().toLocaleDateString('ru-RU')}`,
+      `--------------------------------------------------------------------------------`,
+      ``,
+      `1. Наименование социальной задачи:`,
+      task.task_title || '—',
+      ``,
+      `2. Направления социальной задачи Добро.рф (хэштеги):`,
+      (task.directions || []).join(', '),
+      ``,
+      `3. Описание социальной задачи и проблематики:`,
+      task.task_description || '—',
+      ``,
+      `4. Целевая аудитория благополучателей:`,
+      task.target_audience || '—',
+      ``,
+      `5. Ожидаемый прикладной продукт:`,
+      task.expected_product || '—',
+      ``,
+      `6. География проекта (регион): ${task.region || 'Москва'}`,
+      `7. Формат участия обучающихся: ${task.participation_format || 'Онлайн'}`,
+      `8. Тип учебного заведения: ${task.edu_institution_type || 'Высшее учебное заведение'}`,
+      `9. Готовность создать условия на территории: ${task.ready_for_on_site ? 'Готов предоставить площадку' : 'Дистанционный формат'}`,
+      ``,
+      `10. Дополнительная информация и требуемые компетенции:`,
+      task.additional_info || '—',
+      ``,
+      `================================================================================`,
+      `Сформировано через сервис «Обучение служением» РАНХиГС & Добро.рф`
+    ].join('\n');
+
+    const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Zadacha_DobroRF_${task.task_title?.slice(0, 30).replace(/[^a-zA-Zа-яА-Я0-9]/g, '_') || 'anketa'}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('Анкета успешно сохранена в текстовый файл!');
+  };
+
   // Фильтрация студенческих проектов на Главной
   const filteredProjects = STUDENT_PROJECTS.filter((p) => {
     const matchDir =
@@ -1959,7 +2011,7 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                     </span>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-[#9E1B32] border border-rose-200">
                       <Sparkles className="w-3.5 h-3.5 text-[#9E1B32]" />
-                      Все 3 трека: Исследование · Продукт · Событие
+                      3 альтернативных варианта реализации задачи
                     </span>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                       <Building2 className="w-3.5 h-3.5 text-slate-600" />
@@ -2218,43 +2270,13 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                       <span>{selectedModel}</span>
                     </div>
 
-                    {/* Селектор режима (как на скриншоте: "🛡️ Turbo ⌵") */}
-                    <div className="relative hidden sm:block">
-                      <button
-                        type="button"
-                        onClick={() => setModeMenuOpen(!modeMenuOpen)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>{selectedMode}</span>
-                        <ChevronDown className="w-3 h-3 text-slate-400" />
-                      </button>
-                      {modeMenuOpen && (
-                        <div className="absolute left-0 bottom-10 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedMode('Стандарт Добро.рф');
-                              setModeMenuOpen(false);
-                            }}
-                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-rose-50 transition cursor-pointer flex items-center justify-between"
-                          >
-                            <span>Стандарт Добро.рф</span>
-                            {selectedMode === 'Стандарт Добро.рф' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedMode('Все 3 трека программы');
-                              setModeMenuOpen(false);
-                            }}
-                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-rose-50 transition cursor-pointer flex items-center justify-between"
-                          >
-                            <span>Все 3 трека программы</span>
-                            {selectedMode === 'Все 3 трека программы' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                          </button>
-                        </div>
-                      )}
+                    {/* Режим валидации (строгий 10-полевой стандарт Добро.рф) */}
+                    <div
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 shadow-2xs"
+                      title="Каждая генерация автоматически формирует 3 варианта по официальному 10-полевому стандарту верификации Добро.рф"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Стандарт Добро.рф · 10 полей</span>
                     </div>
                   </div>
 
@@ -2288,6 +2310,48 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Быстрые примеры запросов для любых сфер деятельности НКО */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                  Быстрый выбор темы:
+                </span>
+                {[
+                  {
+                    label: '🧸 Праздники и детсады',
+                    text: 'Организация серии развивающих занятий, интерактивных утренников и творческих мастер-классов для воспитанников детских садов'
+                  },
+                  {
+                    label: '💻 Сайт / бот для НКО',
+                    text: 'Разработка современного адаптивного сайта и Telegram-бота для информирования благополучателей и координации волонтеров фонда'
+                  },
+                  {
+                    label: '🌳 Экологическая акция',
+                    text: 'Организация районной экологической акции по раздельному сбору вторсырья и проведение эко-уроков бережного отношения к природе'
+                  },
+                  {
+                    label: '👵 Помощь ветеранам',
+                    text: 'Программа шефской поддержки и цифровой грамотности для пожилых граждан и ветеранов: обучение пользованию госуслугами и смартфонами'
+                  },
+                  {
+                    label: '⚖️ Правовая помощь',
+                    text: 'Юридические консультации и разработка справочных памяток по льготам и защите прав для многодетных семей'
+                  }
+                ].map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setPromptText(chip.text);
+                      setConsentPd(true);
+                      showToast(`Подставлен пример: «${chip.label}»`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 hover:text-[#9E1B32] border border-slate-200/80 text-[11px] font-medium text-slate-600 transition cursor-pointer"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
               </div>
 
 
@@ -2391,23 +2455,35 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                   </h2>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => copyCompleteTemplate(currentTask)}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition cursor-pointer shrink-0"
-                >
-                  {copiedKey === 'copy-all-template' ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-400" />
-                      <span>Шаблон скопирован</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      <span>Скопировать весь шаблон</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => downloadCompleteTemplate(currentTask)}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition cursor-pointer"
+                    title="Скачать анкету верификации в формате .txt"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Скачать .txt</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => copyCompleteTemplate(currentTask)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition cursor-pointer shrink-0"
+                  >
+                    {copiedKey === 'copy-all-template' ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span>Шаблон скопирован</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        <span>Скопировать весь шаблон</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Переключатель сгенерированных ИИ вариантов (если сгенерировано 3 варианта) */}
@@ -3529,6 +3605,16 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                 <span>Перейти к публикации на Добро.рф</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
+
+              <button
+                type="button"
+                onClick={() => downloadCompleteTemplate(currentTask)}
+                className="px-4 py-3.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs sm:text-sm transition cursor-pointer flex items-center justify-center gap-1.5"
+                title="Скачать анкету в файл .txt"
+              >
+                <Download className="w-4 h-4" />
+                <span>Скачать .txt</span>
+              </button>
 
               <button
                 type="button"
