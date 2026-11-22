@@ -522,6 +522,9 @@ export default function App() {
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState('');
   const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const timerRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -837,81 +840,149 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
 
   const handleToggleMicrophone = () => {
     if (isRecording) {
+      // Остановка Web Speech API
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
         recognitionRef.current = null;
       }
+
+      // Остановка MediaRecorder (аудиопоток)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
+
       setIsRecording(false);
 
       if (liveTranscript.trim()) {
-        const durationStr = `00:${String(Math.max(1, recordSeconds)).padStart(2, '0')}`;
-        setSources((prev) => [
-          ...prev,
-          {
-            id: `voice-${Date.now()}`,
-            type: 'voice',
-            title: `Голосовая запись (${durationStr})`,
-            meta: 'Распознано в источник',
-            content: liveTranscript.trim()
-          }
-        ]);
-        showToast('Голосовое описание добавлено в источники');
+        const textToInsert = liveTranscript.trim();
+        setPromptText((prev) => (prev ? `${prev} ${textToInsert}` : textToInsert));
+        showToast('Надиктованный текст добавлен в поле задачи!');
       }
-      setLiveTranscript('');
       return;
     }
 
+    // Запуск микрофона
+    setValidationError('');
+    setLiveTranscript('');
+    audioChunksRef.current = [];
+
+    // 1. Запрашиваем доступ к микрофону через getUserMedia (работает во всех браузерах: Chrome, Firefox, Edge)
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          setIsRecording(true);
+          showToast('Микрофон активен. Говорите вашу задачу...');
+
+          let mimeType = 'audio/webm';
+          if (typeof MediaRecorder !== 'undefined') {
+            if (!MediaRecorder.isTypeSupported('audio/webm')) {
+              if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+              else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+            }
+          }
+
+          const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunksRef.current.push(e.data);
+            }
+          };
+
+          recorder.onstop = async () => {
+            stream.getTracks().forEach((track) => track.stop());
+
+            // Если Web Speech API уже выдал текст, Whisper не нужен
+            if (liveTranscript.trim()) {
+              return;
+            }
+
+            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
+            if (audioBlob.size > 1500) {
+              setIsTranscribingAudio(true);
+              try {
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'voice_input.webm');
+                formData.append('model', 'Systran/faster-whisper-small');
+                formData.append('language', 'ru');
+
+                const whisperResp = await fetch('http://localhost:9000/v1/audio/transcriptions', {
+                  method: 'POST',
+                  body: formData
+                });
+
+                if (whisperResp.ok) {
+                  const whisperJson = await whisperResp.json();
+                  if (whisperJson.text && whisperJson.text.trim()) {
+                    const text = whisperJson.text.trim();
+                    setPromptText((prev) => (prev ? `${prev} ${text}` : text));
+                    setLiveTranscript(text);
+                    showToast('Голос успешно расшифрован через Whisper!');
+                  }
+                }
+              } catch (err) {
+                console.warn('Локальный Whisper недоступен:', err);
+              } finally {
+                setIsTranscribingAudio(false);
+              }
+            }
+          };
+
+          recorder.start(500);
+          mediaRecorderRef.current = recorder;
+        })
+        .catch((err) => {
+          console.warn('Ошибка доступа к микрофону:', err);
+          setValidationError(
+            'Доступ к микрофону не предоставлен. Нажмите «Разрешить» в запросе браузера или проверьте настройки микрофона.'
+          );
+          showToast('Разрешите браузеру доступ к микрофону');
+          setIsRecording(false);
+        });
+    }
+
+    // 2. Параллельно запускаем Web Speech API для живого отображения слов на экране (Chrome, Edge, Яндекс)
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
-      setValidationError(
-        'Ваш браузер не поддерживает голосовой ввод (Web Speech API). Используйте Chrome, Яндекс.Браузер или Edge, либо загрузите файл.'
-      );
-      return;
-    }
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ru-RU';
+        recognition.continuous = true;
+        recognition.interimResults = true;
 
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'ru-RU';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      let finalText = '';
-      recognition.onresult = (event) => {
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            finalText += event.results[i][0].transcript + ' ';
-          } else {
-            interim += event.results[i][0].transcript;
+        let accumulatedFinal = '';
+        recognition.onresult = (event) => {
+          let currentInterim = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              accumulatedFinal += event.results[i][0].transcript + ' ';
+            } else {
+              currentInterim += event.results[i][0].transcript;
+            }
           }
-        }
-        setLiveTranscript((finalText + interim).trim());
-      };
+          const spoken = (accumulatedFinal + currentInterim).trim();
+          setLiveTranscript(spoken);
+        };
 
-      recognition.onerror = () => {
-        setIsRecording(false);
-        showToast('Микрофон остановлен. Проверьте разрешения браузера на аудио.');
-      };
+        recognition.onerror = (e) => {
+          console.warn('Web Speech API error:', e.error);
+        };
 
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      recognitionRef.current = recognition;
-      setLiveTranscript('');
-      setIsRecording(true);
-      setValidationError('');
-      recognition.start();
-    } catch (e) {
-      setValidationError('Ошибка доступа к микрофону. Проверьте разрешения в браузере.');
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (e) {
+        console.warn('Ошибка запуска SpeechRecognition:', e);
+      }
     }
   };
 
-  // Интеграция с локальным/удаленным Dify Workflow (GigaChat РАНХиГС) + Vercel /api/generate fallback
+    // Интеграция с локальным/удаленным Dify Workflow (GigaChat РАНХиГС) + Vercel /api/generate fallback
   const callBackendGenerate = async () => {
     // Собираем текст из текстового поля и всех прикрепленных источников
     let combinedMaterials = promptText.trim();
@@ -1885,6 +1956,52 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                  ===================================================================== */}
               <div className="bg-white rounded-3xl border border-slate-300 hover:border-slate-400 focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-[#9E1B32]/10 shadow-sm transition p-4 sm:p-5 space-y-3">
                 {/* 1. Поле для ввода текста задачи */}
+                {/* БЛОК ЖИВОЙ ДИКТОВКИ (ПОЛЬЗОВАТЕЛЬ ВИДИТ В РЕАЛЬНОМ ВРЕМЕНИ, ЧТО ОН ГОВОРИТ) */}
+                {isRecording && (
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-50 via-rose-100/50 to-pink-50 border border-rose-200 shadow-xs space-y-2 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+                        </span>
+                        <span className="text-xs font-bold text-rose-900 tracking-wide uppercase">
+                          Идет запись голоса · 00:{String(recordSeconds).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleMicrophone}
+                        className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                      >
+                        Завершить и вставить
+                      </button>
+                    </div>
+
+                    <div className="bg-white/95 rounded-xl p-3 border border-rose-200/60 min-h-[50px] flex items-center">
+                      <p className="text-sm font-medium text-slate-800 leading-relaxed">
+                        {liveTranscript ? (
+                          <>
+                            <span className="text-rose-950 font-bold mr-1.5">Распознается:</span>
+                            <span className="italic">«{liveTranscript}»</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 italic">
+                            Слушаю вас... Говорите в микрофон, слова будут появляться здесь в реальном времени.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {isTranscribingAudio && (
+                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex items-center gap-2.5 text-xs font-semibold text-amber-900 animate-pulse">
+                    <RefreshCw className="w-4 h-4 animate-spin text-amber-600" />
+                    <span>Локальный Whisper расшифровывает надиктованную аудиозапись...</span>
+                  </div>
+                )}
+
                 <label htmlFor="prompt-input" className="sr-only">Описание задачи</label>
                 <textarea
                   id="prompt-input"
@@ -3311,7 +3428,7 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <a
-                href="https://dobro.ru/dashboard/organizer/projects/new"
+                href="https://dobro.ru/dashboard/organizer"
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setDobroSyncSuccessModal(false)}
