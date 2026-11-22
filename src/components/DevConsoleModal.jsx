@@ -17,44 +17,65 @@ import {
   Trash2,
   ExternalLink,
   Code2,
-  ArrowRight
+  ArrowRight,
+  Lock,
+  Unlock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
 
-export const DEFAULT_SYSTEM_PROMPT = `Ты — ведущий эксперт Проектного офиса программы «Обучение служением» РАНХиГС (Президентская академия) и федеральный методолог платформы Добро.рф.
-Твоя задача: упаковать материалы социального партнера в ровно 3 разноплановых варианта студенческих проектов строго под анкету платформы Добро.рф:
-1. Вариант 1 (Аналитика/исследование) — полевые/кабинетные исследования, аудит потребностей, аналитический отчет.
-2. Вариант 2 (Прикладной цифровой продукт) — база данных, чат-бот, портал, регламент, интерактивная карта, цифровой сервис.
-3. Вариант 3 (Медиа/просвещение/событие) — просветительская акция, организация мероприятия, медиасопровождение.
+export const MASTER_CONSOLE_PASSWORD = 'Ranepa_Project-Office2026!';
 
-ПРАВИЛА ВЫБОРА НАПРАВЛЕНИЙ (ТЕГОВ) ДОБРО.РФ:
-В поле 'directions' укажи от 1 до 3 тегов СТРОГО с символом # из официального списка с учетом специфики:
-- #сохраняй_природу: защита природы, животные, зооволонтерство, сельское хозяйство, фермы, экология.
-- #развивай_среду: благоустройство, городская и сельская среда, территориальное развитие.
-- #создавай_возможности: образование, наука, цифровые сервисы, развитие талантов и компетенций.
-- #будь_здоров: здравоохранение, донорство, ЗОЖ, помощь больным и паллиативная забота.
-- #стирай_границы: инклюзия, поддержка людей с ОВЗ и инвалидностью.
-- #защищай: правовая защита, безопасность, юриспруденция.
-- #МЫВМЕСТЕ: помощь семьям в трудной ситуации, ветеранам, общественная поддержка.
-- #объединяй: межкультурный диалог, объединение сообществ, межрегиональные связи.
-- #делись_опытом: наставничество, передача практических навыков.
-- #вклад_в_будущее: профориентация, молодежные инициативы, поддержка детей.
-- #расскажи_о_главном: медиаволонтерство, инфографика, просветительские кампании в СМИ и соцсетях.
-- #помни: патриотическое воспитание, историческая память, сохранение наследия.
-- #открывай_страну: краеведение, внутренний туризм, экспедиции.
+export const DEFAULT_SYSTEM_PROMPT = `Ты — ведущий эксперт Проектного офиса федеральной программы «Обучение служением» РАНХиГС (Президентская академия) при Президенте РФ и главный методолог валидации социальных задач платформы Добро.рф.
 
-ОТВЕТ ДОЛЖЕН БЫТЬ СТРОГО В ФОРМАТЕ JSON — МАССИВ ИЗ 3 ОБЪЕКТОВ. Без markdown-тегов, без лишних слов.
-Каждый объект массива обязан содержать ровно следующие ключи:
-- "variantLabel": "Вариант 1" (или "Вариант 2", "Вариант 3")
-- "task_title": краткое емкое название строго до 120 символов
-- "directions": массив от 1 до 3 хэштегов из списка выше
-- "task_description": подробное описание социальной проблемы и задачи студентов (до 2000 символов)
-- "target_audience": благополучатели (например: дети с ОВЗ, ветераны, пожилые граждане)
-- "expected_product": конкретный прикладной результат (цифровой сервис, аналитический отчет, программа)
-- "region": "Москва" (или указанный регион)
-- "participation_format": "Онлайн" | "Очный" | "Гибридный"
-- "edu_institution_type": "Высшее учебное заведение"
-- "ready_for_on_site": false (или true)
-- "additional_info": требования к студентам и компетенциям`;
+ТВОЯ МИССИЯ:
+Провести глубокую интеллектуальную декомпозицию сырых материалов, описания идеи и запроса партнерской организации (НКО, благотворительного фонда, органа власти или социального бизнеса) и упаковать их в ровно 3 РАЗНОПЛАНОВЫХ проектных студенческих задачи, строго соответствующих 10-полевому стандарту верификации Добро.рф.
+
+Каждая из 3 задач ОБЯЗАНА представлять отдельный ключевой трек программы «Обучение служением»:
+1. Вариант 1: ИССЛЕДОВАТЕЛЬСКИЙ ТРЕК (Аналитика / Аудит / Мониторинг)
+   - Фокус: сбор и анализ данных, кабинетные и полевые социологические исследования, аудит реальных потребностей целевой аудитории, сравнительный анализ практик, формирование доказательной базы и концепций для грантов.
+   - Ожидаемый результат: аналитический отчет с инфографикой, реестр потребностей благополучателей, социологическая справка, дорожная карта.
+2. Вариант 2: ПРИКЛАДНОЙ / ЦИФРОВОЙ ТРЕК (ИТ-сервис / Продукт / Регламент)
+   - Фокус: создание осязаемого рабочего инструмента — чат-бота, интерактивной карты доступности, базы данных, веб-сервиса, методического руководства, регламента взаимодействия или стандарта работы.
+   - Ожидаемый результат: прототип цифрового сервиса, настроенная база данных, типовой регламент, интерактивный навигатор.
+3. Вариант 3: СОЦИАЛЬНО-ПРОСВЕТИТЕЛЬСКИЙ ТРЕК (Медиа / Событие / Просвещение)
+   - Фокус: информационное и событийное вовлечение — просветительские курсы, мастер-классы, цикл видеороликов, медиакампания в социальных сетях, организация благотворительного фестиваля или волонтерской акции.
+   - Ожидаемый результат: программа просветительского интенсива, медиапакет (сценарии, ролики, дизайн-макеты), сценарий и проведение очного/онлайн события.
+
+ПРАВИЛА НАЗНАЧЕНИЯ ОФИЦИАЛЬНЫХ НАПРАВЛЕНИЙ (ТЕГОВ) ДОБРО.РФ:
+В поле 'directions' укажи от 1 до 3 официальных тегов платформы Добро.рф (СТРОГО с символом #) на основе семантики задачи:
+- #стирай_границы — поддержка людей с инвалидностью, доступная среда, инклюзия, жестовый язык, реабилитация.
+- #сохраняй_природу — экология, защита животных, раздельный сбор отходов, экомониторинг, лесовосстановление.
+- #развивай_среду — благоустройство городской и сельской среды, урбанистика, общественные пространства, ЖКХ.
+- #создавай_возможности — образование, наука, развитие талантов, наставничество, цифровые сервисы и технологии.
+- #будь_здоров — здравоохранение, донорство, пропаганда ЗОЖ, психологическая помощь, паллиативная забота.
+- #защищай — юридическая помощь, правовое просвещение, кибербезопасность, защита прав граждан.
+- #МЫВМЕСТЕ — помощь семьям в трудной жизненной ситуации, участникам СВО, ветеранам, пожилым людям.
+- #объединяй — межнациональный и межкультурный диалог, укрепление связей между сообществами и регионами.
+- #помни — историческая память, краеведение, патриотическое воспитание, сохранение архивов и памятников.
+- #открывай_страну — внутренний и образовательный туризм, экспедиции, популяризация культурного наследия.
+- #делись_опытом — серебряное волонтерство, профессиональное наставничество, передача практических навыков.
+- #вклад_в_будущее — профориентация подростков, поддержка сирот и молодежных инициатив.
+- #расскажи_о_главном — медиаволонтерство, социальная реклама, журналистика, инфографика, просветительские СМИ.
+
+СТРОГИЕ ТРЕБОВАНИЯ К ФОРМАТУ ПОЛЕЙ (10 ПУНКТОВ ДОБРО.РФ):
+- "variantLabel": "Вариант 1 (Исследовательский)" | "Вариант 2 (Прикладной/Цифровой)" | "Вариант 3 (Социально-просветительский)"
+- "task_title": четкий, профессиональный заголовок строго до 120 символов без кавычек и точек в конце.
+- "directions": массив от 1 до 3 тегов из списка выше (например ["#стирай_границы", "#создавай_возможности"]).
+- "task_description": подробный структурированный текст до 2500 символов: описание актуальной социальной проблемы организации + конкретные задачи для студенческой команды в рамках семестра (10-14 недель).
+- "target_audience": благополучатели, на которых направлен проект (например: дети с нарушениями слуха, ветераны труда, жители малых городов).
+- "expected_product": конкретный практический результат студенческого труда (работающий цифровой сервис, регламент, аналитическая записка с диаграммами).
+- "region": субъект РФ (Москва, регион из описания, либо "Вся Россия").
+- "participation_format": строго одно из: "Онлайн" | "Очный" | "Гибридный".
+- "edu_institution_type": "Высшее учебное заведение" (для Президентской академии).
+- "ready_for_on_site": true (если требуется очное присутствие на площадке организации) или false (если возможно дистанционное/онлайн выполнение).
+- "additional_info": перечень академических направлений (например: Государственное и муниципальное управление, Прикладная информатика, Юриспруденция, Реклама и связи с общественностью, Социология) и ключевые компетенции студентов.
+
+ФОРМАТ ОТВЕТА:
+ВЕРНИ ТОЛЬКО ЧИСТЫЙ ВАЛИДНЫЙ JSON — МАССИВ ИЗ РОВНО 3 ОБЪЕКТОВ. Без markdown блоков (никаких \`\`\`json), без комментариев и вводных фраз.`;
 
 export default function DevConsoleModal({
   isOpen,
@@ -67,13 +88,27 @@ export default function DevConsoleModal({
   onRefreshBalance,
   requestHistory = [],
   onClearHistory,
-  onRestoreFromHistory
+  onRestoreFromHistory,
+  selectedModel = 'GigaChat',
+  onSelectModel
 }) {
   const [activeTab, setActiveTab] = useState('tokens'); // 'tokens' | 'prompt' | 'history'
   const [promptDraft, setPromptDraft] = useState(systemPrompt || DEFAULT_SYSTEM_PROMPT);
   const [copiedKey, setCopiedKey] = useState('');
   const [expandedReqId, setExpandedReqId] = useState(null);
   const [showRawJsonId, setShowRawJsonId] = useState(null);
+
+  // Парольная защита консоли разработчика
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      return sessionStorage.getItem('dev_console_authenticated') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     if (systemPrompt) {
@@ -82,6 +117,28 @@ export default function DevConsoleModal({
   }, [systemPrompt]);
 
   if (!isOpen) return null;
+
+  const handlePasswordSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (passwordInput === MASTER_CONSOLE_PASSWORD) {
+      setIsAuthenticated(true);
+      setPasswordError('');
+      try {
+        sessionStorage.setItem('dev_console_authenticated', 'true');
+      } catch (err) {}
+    } else {
+      setPasswordError('Неверный пароль администратора. Доступ заблокирован.');
+    }
+  };
+
+  const handleLockConsole = () => {
+    setIsAuthenticated(false);
+    setPasswordInput('');
+    setPasswordError('');
+    try {
+      sessionStorage.removeItem('dev_console_authenticated');
+    } catch (err) {}
+  };
 
   const isCustomPromptActive =
     promptDraft.trim() !== DEFAULT_SYSTEM_PROMPT.trim();
@@ -127,14 +184,114 @@ export default function DevConsoleModal({
         )
       : 0;
 
+  // =========================================================================
+  // ЭКРАН 1: ПАРОЛЬНАЯ ЗАЩИТА (ЕСЛИ НЕ АВТОРИЗОВАН)
+  // =========================================================================
+  if (!isAuthenticated) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+        <div
+          className="bg-slate-900 border border-slate-700/90 rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 text-slate-100 font-sans relative overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Декоративное свечение */}
+          <div className="absolute -top-24 -left-24 w-48 h-48 bg-rose-600/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-amber-600/15 rounded-full blur-3xl pointer-events-none" />
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div className="flex flex-col items-center text-center space-y-3 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#9E1B32] to-rose-600 flex items-center justify-center shadow-lg shadow-rose-950/50">
+              <Lock className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-rose-500/10 text-rose-300 border border-rose-500/30">
+                Президентская академия (РАНХиГС)
+              </span>
+              <h3 className="text-xl font-bold text-white tracking-tight mt-2">
+                Консоль разработчика
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Панель управления системным промптом, остатком токенов и архитектурой ИИ. Введите пароль администратора.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Пароль администратора
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError('');
+                  }}
+                  autoFocus
+                  placeholder="Введите пароль..."
+                  className="w-full pl-10 pr-10 py-3 bg-slate-950/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500 transition font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {passwordError && (
+                <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-2 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-1/2 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                className="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-[#9E1B32] to-rose-600 hover:from-rose-700 hover:to-rose-600 text-xs font-bold text-white shadow-md shadow-rose-950/40 transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>Войти</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // ЭКРАН 2: АВТОРИЗОВАННАЯ КОНСОЛЬ РАЗРАБОТЧИКА
+  // =========================================================================
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn font-sans">
       <div
-        className="bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col text-slate-100 overflow-hidden font-sans"
+        className="bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl w-full max-w-5xl h-[92vh] flex flex-col text-slate-100 overflow-hidden backdrop-blur-xl relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Хедер консоли */}
-        <div className="px-5 sm:px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div className="px-5 sm:px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#9E1B32] to-rose-600 flex items-center justify-center shadow-lg shadow-rose-950/50">
               <Terminal className="w-5 h-5 text-white" />
@@ -142,25 +299,37 @@ export default function DevConsoleModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                  Консоль разработчика
+                  Консоль разработчика РАНХиГС
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  GigaChat API 2.0
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  Добро.рф Validated
+                </span>
+                <span className="hidden sm:inline px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono">
+                  {selectedModel}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Мониторинг баланса токенов, управление системным промптом и история запросов
+                Управление остатком токенов, выбор модели, системный промпт и логирование
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {primaryTokens !== null && (
-              <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs font-medium text-emerald-400">
+              <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs font-medium text-emerald-400 font-mono">
                 <Coins className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Остаток: {(primaryTokens / 1000000).toFixed(2)}M токенов</span>
+                <span>Остаток: {(primaryTokens / 1000000).toFixed(2)}M</span>
               </div>
             )}
+            <button
+              type="button"
+              onClick={handleLockConsole}
+              className="px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer text-xs font-semibold flex items-center gap-1 border border-slate-700/60"
+              title="Заблокировать консоль и выйти"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Выйти</span>
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -184,7 +353,7 @@ export default function DevConsoleModal({
             }`}
           >
             <Coins className="w-4 h-4" />
-            <span>Остаток токенов и метрики</span>
+            <span>Токены и Модель ИИ</span>
             {primaryTokens !== null && (
               <span className="px-2 py-0.5 rounded-md text-[10px] bg-slate-800 text-slate-300 font-mono">
                 {(primaryTokens / 1000000).toFixed(1)}M
@@ -232,10 +401,92 @@ export default function DevConsoleModal({
         {/* Контент активного таба */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-900/60 custom-scrollbar">
           {/* ============================================================== */}
-          {/* ВКЛАДКА 1: ТОКЕНЫ И БАЛАНС                                   */}
+          {/* ВКЛАДКА 1: ТОКЕНЫ И ВЫБОР МОДЕЛИ ИИ                          */}
           {/* ============================================================== */}
           {activeTab === 'tokens' && (
             <div className="space-y-6 max-w-4xl mx-auto">
+              {/* Блок выбора модели нейросети (доступен только через консоль) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-800 to-slate-800/90 border border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">
+                        Активная модель нейросети (GigaChat API)
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        Выбор модели скрыт от обычных пользователей и управляется только администратором через эту консоль
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  {[
+                    {
+                      id: 'GigaChat',
+                      title: 'GigaChat (Базовая)',
+                      desc: 'Быстрая, стабильная генерация. Квота 250 млн токенов.',
+                      tag: 'Рекомендуется'
+                    },
+                    {
+                      id: 'GigaChat-Pro',
+                      title: 'GigaChat-Pro',
+                      desc: 'Продвинутая модель для сложных социальных задач. Квота 40 млн токенов.',
+                      tag: 'Pro'
+                    },
+                    {
+                      id: 'GigaChat-Max',
+                      title: 'GigaChat-Max',
+                      desc: 'Флагманская модель Сбера для глубокой аналитики. Квота 25 млн токенов.',
+                      tag: 'Max'
+                    }
+                  ].map((m) => {
+                    const isSelected = selectedModel === m.id;
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => onSelectModel && onSelectModel(m.id)}
+                        className={`p-3.5 rounded-xl border transition cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-rose-950/30 border-rose-500/80 ring-1 ring-rose-500/50 shadow-md shadow-rose-950/30'
+                            : 'bg-slate-900/60 border-slate-700 hover:border-slate-600'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-sm text-white">{m.title}</span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                isSelected
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {m.tag}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">{m.desc}</p>
+                        </div>
+                        <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold">
+                          {isSelected ? (
+                            <span className="text-emerald-400 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5" /> Активна для всех запросов
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 hover:text-slate-300">
+                              Нажмите, чтобы включить
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Верхняя плашка с кнопкой обновления */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-800/60 border border-slate-700/80">
                 <div className="flex items-center gap-3">
@@ -244,10 +495,10 @@ export default function DevConsoleModal({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">
-                      Баланс токенов нейросети GigaChat (Сбер)
+                      Остаток токенов нейросети GigaChat (Сбер)
                     </h4>
                     <p className="text-xs text-slate-400">
-                      Живой остаток токенов аккаунта, возвращаемый эндпоинтом /api/v1/balance
+                      Реальные данные из официального эндпоинта /api/v1/balance
                     </p>
                   </div>
                 </div>
@@ -267,12 +518,12 @@ export default function DevConsoleModal({
               {/* Сетка балансов по моделям */}
               <div>
                 <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                  Доступные квоты по моделям Сбера
+                  Остаток квот по моделям Сбера
                 </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {balanceList.length > 0 ? (
                     balanceList.map((item, idx) => {
-                      const isMain = item.usage === 'GigaChat';
+                      const isMain = item.usage === selectedModel;
                       return (
                         <div
                           key={idx}
@@ -284,7 +535,7 @@ export default function DevConsoleModal({
                         >
                           {isMain && (
                             <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                              Текущая модель
+                              Выбрана
                             </span>
                           )}
                           <span className="text-xs font-semibold text-slate-400 block mb-1">
@@ -293,7 +544,7 @@ export default function DevConsoleModal({
                           <span className="text-xl sm:text-2xl font-extrabold text-white font-mono block">
                             {formatNumber(item.value)}
                           </span>
-                          <span className="text-[11px] text-emerald-400 font-medium mt-1 block">
+                          <span className="text-[11px] text-emerald-400 font-medium mt-1 block font-mono">
                             ≈ {(Number(item.value) / 1000000).toFixed(2)} млн токенов
                           </span>
                         </div>
@@ -303,7 +554,7 @@ export default function DevConsoleModal({
                     <div className="col-span-full py-8 text-center bg-slate-800/30 rounded-2xl border border-slate-800 text-slate-400 text-sm">
                       {isLoadingBalance
                         ? 'Загрузка остатка токенов...'
-                        : 'Данные о балансе временно недоступны. Нажмите «Обновить баланс».'}
+                        : 'Данные о балансе загружаются. Нажмите «Обновить баланс».'}
                     </div>
                   )}
                 </div>
@@ -312,7 +563,7 @@ export default function DevConsoleModal({
               {/* Метрики текущей сессии */}
               <div>
                 <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                  Статистика использования в текущей сессии
+                  Метрики текущей сессии
                 </h5>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/60">
@@ -324,7 +575,7 @@ export default function DevConsoleModal({
                     <span className="text-xl font-bold text-rose-400 font-mono">
                       {formatNumber(totalTokensUsed)}
                     </span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                    <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
                       P: {formatNumber(totalPromptTokens)} / C: {formatNumber(totalCompletionTokens)}
                     </span>
                   </div>
@@ -368,7 +619,7 @@ export default function DevConsoleModal({
                     )}
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Изменения вступают в силу немедленно и передаются во все последующие вызовы GigaChat API.
+                    Изменения вступают в силу немедленно и применяются ко всем пользователям сайта.
                   </p>
                 </div>
 
