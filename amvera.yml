@@ -1,0 +1,13 @@
+# amvera.yml
+# Конфигурация развертывания проекта «Обучение служением» в облаке Amvera (РФ)
+meta:
+  environment: node
+  toolchain:
+    name: npm
+    version: 20
+
+build:
+  additionalCommands: npm run build
+
+run:
+  command: npm start
