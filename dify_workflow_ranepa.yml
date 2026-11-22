@@ -1,0 +1,515 @@
+app:
+  name: РАНХиГС-Проектный офис
+  mode: workflow
+  icon: 🎓
+  icon_background: '#9E1B32'
+  description: Интеллектуальная упаковка партнерских проектов «Обучение служением»
+    РАНХиГС под стандарт Добро.рф через GigaChat и Jina Reader
+kind: app
+version: 0.3.1
+workflow:
+  graph:
+    nodes:
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: end_node
+      positionAbsolute:
+        x: 1700.9265418811267
+        y: 250
+      data:
+        type: end
+        title: Вывод (3 задачи)
+        outputs:
+        - variable: result_text
+          value_type: string
+          value_selector:
+          - parse_dobro_tasks
+          - result_text
+        - variable: tasks
+          value_type: array[object]
+          value_selector:
+          - parse_dobro_tasks
+          - tasks
+        - variable: tasks_json
+          value_type: string
+          value_selector:
+          - parse_dobro_tasks
+          - tasks_json
+        - variable: status
+          value_type: string
+          value_selector:
+          - parse_dobro_tasks
+          - status
+        selected: false
+      position:
+        y: 250
+        x: 1700.9265418811267
+      type: custom
+      height: 141
+      selected: false
+      width: 242
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: gigachat_chat
+      positionAbsolute:
+        x: 1041.6863781679247
+        y: 250
+      data:
+        headers: 'Authorization: {{#prepare_context.auth_header#}}
+
+          Content-Type: application/json'
+        method: post
+        retry_config:
+          max_retries: 2
+          retry_interval: 300
+          retry_enabled: true
+        timeout:
+          max_connect_timeout: 15
+          max_write_timeout: 15
+          max_read_timeout: 60
+        title: GigaChat (Генерация задач)
+        ssl_verify: false
+        body:
+          type: raw-text
+          data:
+          - value: '{"model": "GigaChat", "messages": [{"role": "system", "content":
+              "{{#prepare_context.system_prompt#}}"}, {"role": "user", "content":
+              "{{#prepare_context.prompt_text#}}"}], "temperature": 0.6}'
+            type: text
+        params: ''
+        authorization:
+          config: null
+          type: no-auth
+        type: http-request
+        url: https://gigachat.devices.sberbank.ru/api/v1/chat/completions
+        selected: false
+      position:
+        y: 250
+        x: 1041.6863781679247
+      type: custom
+      height: 137
+      selected: false
+      width: 242
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: gigachat_oauth
+      positionAbsolute:
+        x: 380
+        y: 380
+      data:
+        headers: 'Authorization: Basic MDFhMjAyZWEtMjY3NC03MTUyLWI1ODMtMzljZWQwOTFhY2UzOmUzMzVlZTUxLTFmZWUtNGMzYi1iZGY4LTdhZGIyZGJiNWVhNA==
+
+          RqUID: 123e4567-e89b-12d3-a456-426614174000
+
+          Content-Type: application/x-www-form-urlencoded'
+        method: post
+        retry_config:
+          max_retries: 2
+          retry_interval: 200
+          retry_enabled: true
+        timeout:
+          max_connect_timeout: 10
+          max_write_timeout: 10
+          max_read_timeout: 30
+        title: OAuth токен GigaChat
+        ssl_verify: false
+        body:
+          type: x-www-form-urlencoded
+          data:
+          - value: GIGACHAT_API_PERS
+            type: text
+            key: scope
+        params: ''
+        authorization:
+          config: null
+          type: no-auth
+        type: http-request
+        url: https://ngw.devices.sberbank.ru:9443/api/v2/oauth
+        selected: false
+      position:
+        y: 380
+        x: 380
+      type: custom
+      height: 137
+      selected: false
+      width: 242
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: jina_scraper
+      positionAbsolute:
+        x: 380
+        y: 120
+      data:
+        headers: 'Accept: text/plain'
+        method: get
+        retry_config:
+          max_retries: 2
+          retry_interval: 200
+          retry_enabled: true
+        timeout:
+          max_connect_timeout: 10
+          max_write_timeout: 10
+          max_read_timeout: 30
+        title: Jina Reader (Парсер сайта)
+        ssl_verify: false
+        body:
+          type: none
+          data: []
+        params: ''
+        authorization:
+          config: null
+          type: no-auth
+        type: http-request
+        url: https://r.jina.ai/{{#start_node.partner_url#}}
+        selected: false
+      position:
+        y: 120
+        x: 380
+      type: custom
+      height: 139
+      selected: false
+      width: 242
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: parse_dobro_tasks
+      positionAbsolute:
+        x: 1370
+        y: 250
+      data:
+        code: "import json\nimport re\n\nDOBRO_DIRECTIONS = [\n    '#МЫВМЕСТЕ', '#создавай_возможности',\
+          \ '#развивай_среду', '#будь_здоров',\n    '#сохраняй_природу', '#стирай_границы',\
+          \ '#защищай', '#объединяй',\n    '#помни', '#открывай_страну', '#делись_опытом',\
+          \ '#вклад_в_будущее',\n    '#расскажи_о_главном'\n]\n\ndef format_card(task,\
+          \ idx):\n    dirs = \" \".join(task.get(\"directions\", []))\n    ready\
+          \ = \"Да\" if task.get(\"ready_for_on_site\") else \"Нет\"\n    return f\"\
+          \"\"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\U0001F4CC {task.get(\"\
+          variantLabel\", f\"Вариант {idx}\")}: {task.get(\"task_title\", \"\")}\n\
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\U0001F3F7️ Направления:\
+          \ {dirs}\n\U0001F4CD Регион: {task.get(\"region\", \"Москва\")}  |  Формат:\
+          \ {task.get(\"participation_format\", \"Гибридный\")}  |  Очное присутствие:\
+          \ {ready}\n\n\U0001F4CB Описание социальной задачи:\n{task.get(\"task_description\"\
+          , \"\")}\n\n\U0001F3AF Целевая аудитория (благополучатели):\n{task.get(\"\
+          target_audience\", \"\")}\n\n\U0001F4E6 Ожидаемый прикладной продукт:\n\
+          {task.get(\"expected_product\", \"\")}\n\nℹ️ Дополнительная информация и\
+          \ компетенции:\n{task.get(\"additional_info\", \"\")}\"\"\"\n\ndef main(raw_response:\
+          \ str = \"\", org_name: str = \"\") -> dict:\n    if not raw_response:\n\
+          \        return {\"result_text\": \"Ошибка: пустой ответ от модели\", \"\
+          tasks\": [], \"tasks_json\": \"[]\", \"status\": \"error: empty response\"\
+          }\n        \n    content = \"\"\n    try:\n        data = json.loads(raw_response)\
+          \ if isinstance(raw_response, str) else raw_response\n        content =\
+          \ data.get(\"choices\", [{}])[0].get(\"message\", {}).get(\"content\", \"\
+          \")\n    except Exception:\n        content = str(raw_response)\n      \
+          \  \n    clean = content.strip().replace('\\u00a0', ' ').replace('\\xa0',\
+          \ ' ')\n    if clean.startswith(\"```\"):\n        clean = clean.split(\"\
+          \\n\", 1)[1] if \"\\n\" in clean else clean[3:]\n    if clean.endswith(\"\
+          ```\"):\n        clean = clean.rsplit(\"\\n\", 1)[0] if \"\\n\" in clean\
+          \ else clean[:-3]\n    clean = clean.strip()\n    \n    match = re.search(r'\\\
+          [\\s*\\{.*\\}\\s*\\]', clean, re.DOTALL)\n    if match:\n        clean =\
+          \ match.group(0)\n        \n    try:\n        parsed = json.loads(clean)\n\
+          \    except Exception as e:\n        return {\"result_text\": f\"Ошибка\
+          \ разбора ответа ИИ: {str(e)}\", \"tasks\": [], \"tasks_json\": \"[]\",\
+          \ \"status\": f\"json error: {str(e)}\"}\n        \n    normalized = []\n\
+          \    for idx, item in enumerate(parsed):\n        if not isinstance(item,\
+          \ dict):\n            continue\n        dirs = [d for d in item.get(\"directions\"\
+          , []) if d in DOBRO_DIRECTIONS]\n        if not dirs:\n            dirs\
+          \ = [\"#МЫВМЕСТЕ\"]\n            \n        task = {\n            \"id\"\
+          : f\"gigachat-task-{idx+1}\",\n            \"variantLabel\": item.get(\"\
+          variantLabel\") or f\"Вариант {idx+1}\",\n            \"task_title\": str(item.get(\"\
+          task_title\", \"\"))[:120],\n            \"directions\": dirs[:3],\n   \
+          \         \"task_description\": str(item.get(\"task_description\", \"\"\
+          )),\n            \"target_audience\": str(item.get(\"target_audience\",\
+          \ \"\")),\n            \"expected_product\": str(item.get(\"expected_product\"\
+          , \"\")),\n            \"region\": item.get(\"region\") or \"Москва\",\n\
+          \            \"participation_format\": item.get(\"participation_format\"\
+          ) or \"Гибридный\",\n            \"edu_institution_type\": \"Высшее учебное\
+          \ заведение\",\n            \"ready_for_on_site\": bool(item.get(\"ready_for_on_site\"\
+          , True)),\n            \"additional_info\": str(item.get(\"additional_info\"\
+          , \"\"))\n        }\n        normalized.append(task)\n        \n    partner_title\
+          \ = org_name.strip() if org_name else \"Социальный партнер\"\n    header\
+          \ = (\n        \"\U0001F393 ПРЕЗИДЕНТСКАЯ АКАДЕМИЯ (РАНХиГС) — «ОБУЧЕНИЕ\
+          \ СЛУЖЕНИЕМ»\\n\"\n        f\"Организация: {partner_title}\\n\"\n      \
+          \  \"Сформировано 3 варианта проектных задач под формат платформы Добро.рф:\\\
+          n\"\n    )\n    cards_text = \"\\n\\n\".join(format_card(t, i) for i, t\
+          \ in enumerate(normalized, 1))\n    result_text = f\"{header}\\n{cards_text}\"\
+          \n        \n    return {\n        \"result_text\": result_text,\n      \
+          \  \"tasks\": normalized,\n        \"tasks_json\": json.dumps(normalized,\
+          \ ensure_ascii=False),\n        \"status\": \"success\"\n    }\n"
+        code_language: python3
+        title: Парсер задач Добро.рф
+        outputs:
+          result_text:
+            type: string
+          tasks:
+            type: array[object]
+          tasks_json:
+            type: string
+          status:
+            type: string
+        type: code
+        variables:
+        - variable: raw_response
+          value_selector:
+          - gigachat_chat
+          - body
+        - variable: org_name
+          value_selector:
+          - start_node
+          - org_name
+        selected: false
+      position:
+        y: 250
+        x: 1370
+      type: custom
+      height: 52
+      selected: false
+      width: 242
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: prepare_context
+      positionAbsolute:
+        x: 710
+        y: 250
+      data:
+        code: "import json\n\ndef main(org_name: str = \"\", contact_fio: str = \"\
+          \", materials_text: str = \"\", website_raw: str = \"\", oauth_body: str\
+          \ = \"\") -> dict:\n    access_token = \"\"\n    try:\n        oauth_data\
+          \ = json.loads(oauth_body) if isinstance(oauth_body, str) else oauth_body\n\
+          \        access_token = oauth_data.get(\"access_token\", \"\")\n    except\
+          \ Exception:\n        pass\n    \n    auth_header = f\"Bearer {access_token}\"\
+          \n    \n    web_clean = \"\"\n    if website_raw and len(website_raw.strip())\
+          \ > 50:\n        if \"Welcome to Jina\" not in website_raw and \"Warning\"\
+          \ not in website_raw[:100]:\n            web_clean = website_raw.strip()[:8000]\n\
+          \            \n    system_prompt = (\n        \"Ты — ведущий методолог федеральной\
+          \ программы «Обучение служением» в Президентской академии (РАНХиГС).\\n\"\
+          \n        \"Твоя задача: упаковать материалы социального партнера в ровно\
+          \ 3 разноплановых варианта студенческих проектов строго под анкету платформы\
+          \ Добро.рф:\\n\"\n        \"1. Вариант 1 (Аналитика/исследование) — полевые/кабинетные\
+          \ исследования, аудит потребностей благополучателей.\\n\"\n        \"2.\
+          \ Вариант 2 (Прикладной цифровой продукт) — база данных, чат-бот, регламент,\
+          \ сайт, мобильное приложение или интерактивная карта.\\n\"\n        \"3.\
+          \ Вариант 3 (Медиа/просвещение/событие) — просветительская кампания, организация\
+          \ социально значимого события, медиасопровождение.\\n\\n\"\n        \"ПРАВИЛА\
+          \ ОФОРМЛЕНИЯ ПОЛЕЙ ДОБРО.РФ:\\n\"\n        \"- task_title: емкий заголовок\
+          \ строго до 120 символов.\\n\"\n        \"- directions: массив от 1 до 3\
+          \ хештегов СТРОГО из списка: [#МЫВМЕСТЕ, #создавай_возможности, #развивай_среду,\
+          \ #будь_здоров, #сохраняй_природу, #стирай_границы, #защищай, #объединяй,\
+          \ #помни, #открывай_страну, #делись_опытом, #вклад_в_будущее, #расскажи_о_главном].\\\
+          n\"\n        \"- task_description, target_audience, expected_product, additional_info:\
+          \ подробные академические тексты с маркированными списками (до 3000 символов).\\\
+          n\"\n        \"- participation_format: строго одно из: 'Очный', 'Заочный\
+          \ / Онлайн', 'Гибридный'.\\n\"\n        \"- edu_institution_type: 'Высшее\
+          \ учебное заведение'.\\n\"\n        \"- ready_for_on_site: true или false.\\\
+          n\\n\"\n        \"ВЕРНИ ОТВЕТ СТРОГО В ВИДЕ JSON-МАССИВА ИЗ 3 ОБЪЕКТОВ.\
+          \ БЕЗ ЛИШНЕГО ТЕКСТА, ТОЛЬКО ЧИСТЫЙ JSON.\"\n    )\n    \n    user_prompt\
+          \ = f\"Организация: {org_name or 'Социальный партнер'}\\nКонтактное лицо:\
+          \ {contact_fio or 'Куратор'}\\n\\n\"\n    if materials_text and materials_text.strip():\n\
+          \        user_prompt += f\"Материалы и голосовые заметки партнера:\\n{materials_text.strip()}\\\
+          n\\n\"\n    if web_clean:\n        user_prompt += f\"Содержимое сайта организации:\\\
+          n{web_clean}\\n\\n\"\n    user_prompt += \"Сформируй 3 проектных задачи\
+          \ под формат Добро.рф.\"\n    \n    safe_user_prompt = user_prompt.replace('\\\
+          \\', '\\\\\\\\').replace('\"', '\\\\\"').replace('\\n', '\\\\n').replace('\\\
+          r', '')\n    safe_system_prompt = system_prompt.replace('\\\\', '\\\\\\\\\
+          ').replace('\"', '\\\\\"').replace('\\n', '\\\\n').replace('\\r', '')\n\
+          \    \n    return {\n        \"auth_header\": auth_header,\n        \"system_prompt\"\
+          : safe_system_prompt,\n        \"prompt_text\": safe_user_prompt\n    }\n"
+        code_language: python3
+        title: Подготовка промпта
+        outputs:
+          auth_header:
+            type: string
+          prompt_text:
+            type: string
+          system_prompt:
+            type: string
+        type: code
+        variables:
+        - variable: org_name
+          value_selector:
+          - start_node
+          - org_name
+        - variable: contact_fio
+          value_selector:
+          - start_node
+          - contact_fio
+        - variable: materials_text
+          value_selector:
+          - start_node
+          - materials_text
+        - variable: website_raw
+          value_selector:
+          - jina_scraper
+          - body
+        - variable: oauth_body
+          value_selector:
+          - gigachat_oauth
+          - body
+        selected: false
+      position:
+        y: 250
+        x: 710
+      type: custom
+      height: 52
+      selected: false
+      width: 242
+    - sourcePosition: right
+      targetPosition: left
+      zIndex: 0
+      id: start_node
+      positionAbsolute:
+        x: 50
+        y: 250
+      data:
+        type: start
+        title: Начало (Данные партнера)
+        variables:
+        - variable: org_name
+          label: Организация партнера
+          type: text-input
+          required: false
+          max_length: 256
+        - variable: partner_url
+          label: Ссылка на сайт организации
+          type: text-input
+          required: false
+          max_length: 512
+        - variable: materials_text
+          label: Материалы / Голос / Файлы
+          type: paragraph
+          required: false
+        - variable: contact_fio
+          label: Контактное лицо
+          type: text-input
+          required: false
+          max_length: 256
+        selected: false
+      position:
+        y: 250
+        x: 50
+      type: custom
+      height: 187
+      selected: false
+      width: 242
+    edges:
+    - zIndex: 0
+      sourceHandle: source
+      id: chat-to-parse
+      target: parse_dobro_tasks
+      targetHandle: target
+      type: custom
+      source: gigachat_chat
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - zIndex: 0
+      sourceHandle: source
+      id: jina-to-prepare
+      target: prepare_context
+      targetHandle: target
+      type: custom
+      source: jina_scraper
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - zIndex: 0
+      sourceHandle: source
+      id: oauth-to-prepare
+      target: prepare_context
+      targetHandle: target
+      type: custom
+      source: gigachat_oauth
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - zIndex: 0
+      sourceHandle: source
+      id: parse-to-end
+      target: end_node
+      targetHandle: target
+      type: custom
+      source: parse_dobro_tasks
+      data:
+        sourceType: code
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - zIndex: 0
+      sourceHandle: source
+      id: prepare-to-chat
+      target: gigachat_chat
+      targetHandle: target
+      type: custom
+      source: prepare_context
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - zIndex: 0
+      sourceHandle: source
+      id: start-to-jina
+      target: jina_scraper
+      targetHandle: target
+      type: custom
+      source: start_node
+      data:
+        sourceType: start
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - zIndex: 0
+      sourceHandle: source
+      id: start-to-oauth
+      target: gigachat_oauth
+      targetHandle: target
+      type: custom
+      source: start_node
+      data:
+        sourceType: start
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+        iteration_id: null
+        loop_id: null
+    - id: start-to-parse
+      source: start_node
+      target: parse_dobro_tasks
+    viewport:
+      x: -204.3783970491737
+      y: 372.4477293432765
+      zoom: 0.5929868039211341
+  features:
+    retriever_resource:
+      enabled: true
+    file_upload: {}
+    text_to_speech:
+      enabled: false
+      voice: ''
+      language: ''
+    sensitive_word_avoidance:
+      enabled: false
+  environment_variables: []
+  conversation_variables: []

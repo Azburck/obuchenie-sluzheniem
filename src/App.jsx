@@ -41,7 +41,8 @@ import {
   User,
   ChevronDown,
   FileSpreadsheet,
-  AudioLines
+  AudioLines,
+  Settings
 } from 'lucide-react';
 
 import ranepaCrest from './assets/ranepa_crest.png';
@@ -470,6 +471,18 @@ function RanepaCrestSvg({ className = "w-10 h-12 object-contain shrink-0" }) {
   );
 }
 
+// Настройки сайта и интеграции с Dify по умолчанию (могут настраиваться на лету через Админ-панель)
+const DEFAULT_SITE_SETTINGS = {
+  heroBadge: 'Образовательный подход · Реальный социальный эффект',
+  heroTitle: 'Учебный проект становится общественной практикой',
+  heroSubtitle: '{siteSettings.heroSubtitle}',
+  partnerCardTitle: 'Как передать задачу студенческим командам Академии?',
+  partnerCardText: 'Вам не нужно вручную изучать регламенты. Загрузите презентацию вашей организации или надиктуйте идею мероприятия голосом во вкладке «Сформировать задачу» — интеллектуальный помощник автоматически подготовит все поля шаблона для публикации на платформе Добро.рф.',
+  submitButtonText: 'Сформировать социальную задачу',
+  difyApiUrl: 'http://localhost/v1/workflows/run',
+  difyApiKey: 'app-eBGm45XBFwatdfto8Gki4qPKbxbRTsGSuCfJiPMjrf12TU5N'
+};
+
 export default function App() {
   // Навигация между вкладками: 'main' (Главная: О программе -> Проекты -> Методички) | 'ai' (Сформировать задачу)
   const [activeTab, setActiveTab] = useState('main');
@@ -532,6 +545,73 @@ export default function App() {
   const templateSectionRef = useRef(null);
   const projectsSectionRef = useRef(null);
   const methodsSectionRef = useRef(null);
+
+  // Настройки сайта и интеграция с Dify (редактирование на лету через Админ-панель)
+  const [siteSettings, setSiteSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ranepa_site_settings');
+      if (saved) return { ...DEFAULT_SITE_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {}
+    return DEFAULT_SITE_SETTINGS;
+  });
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [adminFormState, setAdminFormState] = useState(siteSettings);
+  const [difyPingStatus, setDifyPingStatus] = useState(null); // 'checking' | 'ok' | 'error' | null
+  const [adminTab, setAdminTab] = useState('texts'); // 'texts' | 'dify'
+
+  // Проверка связи с локальным Dify Workflow
+  const handlePingDify = async () => {
+    setDifyPingStatus('checking');
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const resp = await fetch(adminFormState.difyApiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${adminFormState.difyApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputs: { org_name: 'Тест подключения', partner_url: '', materials_text: '', contact_fio: '' },
+          response_mode: 'blocking',
+          user: 'ping-test'
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (resp.ok) {
+        setDifyPingStatus('ok');
+        showToast('Связь с Dify Workflow успешно установлена (200 OK)!');
+      } else {
+        setDifyPingStatus('error');
+        showToast(`Dify ответил с кодом ${resp.status}`);
+      }
+    } catch (err) {
+      setDifyPingStatus('error');
+      showToast(`Ошибка связи с Dify: ${err.message}. Убедитесь, что Docker запущен.`);
+    }
+  };
+
+  // Сохранение настроек сайта
+  const handleSaveAdminSettings = () => {
+    setSiteSettings(adminFormState);
+    try {
+      localStorage.setItem('ranepa_site_settings', JSON.stringify(adminFormState));
+    } catch (e) {}
+    setAdminModalOpen(false);
+    showToast('Настройки сайта и подключение к Dify успешно сохранены!');
+  };
+
+  // Сброс настроек к дефолтным
+  const handleResetAdminSettings = () => {
+    setAdminFormState(DEFAULT_SITE_SETTINGS);
+    setSiteSettings(DEFAULT_SITE_SETTINGS);
+    try {
+      localStorage.removeItem('ranepa_site_settings');
+    } catch (e) {}
+    showToast('Настройки сайта сброшены к исходным');
+  };
+
 
   // Показ аккуратного уведомления
   const showToast = (msg) => {
@@ -1198,15 +1278,15 @@ export default function App() {
                 <div className="lg:col-span-7 space-y-6">
                   <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs font-semibold tracking-wide text-rose-200">
                     <Award className="w-4 h-4 text-[#E11D48]" />
-                    <span>Образовательный подход · Реальный социальный эффект</span>
+                    <span>{siteSettings.heroBadge}</span>
                   </div>
 
                   <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-[1.12]">
-                    Учебный проект становится общественной практикой
+                    {siteSettings.heroTitle}
                   </h1>
 
                   <p className="text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl">
-                    «Обучение служением» соединяет академические знания студентов Президентской академии с решением реальных общественных задач от некоммерческих организаций, государственного сектора и социально ответственного бизнеса.
+                    {siteSettings.heroSubtitle}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -1242,11 +1322,11 @@ export default function App() {
                     </div>
 
                     <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 leading-snug">
-                      Как передать задачу студенческим командам Академии?
+                      {siteSettings.partnerCardTitle}
                     </h2>
 
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      Вам не нужно вручную изучать регламенты. Загрузите презентацию вашей организации или надиктуйте идею мероприятия голосом во вкладке <strong>«Сформировать задачу»</strong> — интеллектуальный помощник автоматически подготовит все поля шаблона для публикации на платформе <strong>Добро.рф</strong>.
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                      {siteSettings.partnerCardText}
                     </p>
 
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs text-slate-600">
@@ -2813,6 +2893,259 @@ export default function App() {
               >
                 Закрыть
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          МОДАЛЬНОЕ ОКНО: АДМИН-ПАНЕЛЬ (НАСТРОЙКА ТЕКСТОВ И DIFY НА ЛЕТУ)
+         ===================================================================== */}
+      {adminModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Шапка модалки */}
+            <div className="bg-gradient-to-r from-[#181E29] to-[#2B111A] text-white px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#9E1B32] flex items-center justify-center text-white shadow-md">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Панель управления сайтом</h3>
+                  <p className="text-xs text-slate-300">
+                    Редактирование текстов на лету и интеграция с локальным Dify (GigaChat + Jina)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdminModalOpen(false)}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Вкладки: Тексты сайта / Dify Workflow */}
+            <div className="bg-slate-100 border-b border-slate-200 px-6 pt-3 flex gap-4">
+              <button
+                type="button"
+                onClick={() => setAdminTab('texts')}
+                className={`pb-3 text-xs sm:text-sm font-bold border-b-2 transition cursor-pointer ${
+                  adminTab === 'texts'
+                    ? 'border-[#9E1B32] text-[#9E1B32]'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                📝 Тексты на сайте
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminTab('dify')}
+                className={`pb-3 text-xs sm:text-sm font-bold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+                  adminTab === 'dify'
+                    ? 'border-[#9E1B32] text-[#9E1B32]'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>⚡ Интеграция с Dify & GigaChat</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              </button>
+            </div>
+
+            {/* Тело формы */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {adminTab === 'texts' ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Бейдж над главным заголовком
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFormState.heroBadge}
+                      onChange={(e) =>
+                        setAdminFormState({ ...adminFormState, heroBadge: e.target.value })
+                      }
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Главный заголовок первого экрана (Hero Title)
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFormState.heroTitle}
+                      onChange={(e) =>
+                        setAdminFormState({ ...adminFormState, heroTitle: e.target.value })
+                      }
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Подзаголовок первого экрана (Hero Subtitle)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={adminFormState.heroSubtitle}
+                      onChange={(e) =>
+                        setAdminFormState({ ...adminFormState, heroSubtitle: e.target.value })
+                      }
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Заголовок карточки партнерам
+                      </label>
+                      <input
+                        type="text"
+                        value={adminFormState.partnerCardTitle}
+                        onChange={(e) =>
+                          setAdminFormState({
+                            ...adminFormState,
+                            partnerCardTitle: e.target.value
+                          })
+                        }
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Текст главной кнопки
+                      </label>
+                      <input
+                        type="text"
+                        value={adminFormState.submitButtonText}
+                        onChange={(e) =>
+                          setAdminFormState({
+                            ...adminFormState,
+                            submitButtonText: e.target.value
+                          })
+                        }
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Текст в карточке партнерам
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={adminFormState.partnerCardText}
+                      onChange={(e) =>
+                        setAdminFormState({
+                          ...adminFormState,
+                          partnerCardText: e.target.value
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="text-xs text-emerald-900 leading-relaxed">
+                      <strong>Dify Workflow активен:</strong> приложение обращается к локальному серверу Dify в Docker, который через узел Jina Reader собирает контекст с сайта партнера, а через GigaChat API упаковывает проектные задачи строго под анкету Добро.рф.
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Dify Workflow Run Endpoint (URL)
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFormState.difyApiUrl}
+                      onChange={(e) =>
+                        setAdminFormState({ ...adminFormState, difyApiUrl: e.target.value })
+                      }
+                      placeholder="http://localhost/v1/workflows/run"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Локальный Docker адрес: <code>http://localhost/v1/workflows/run</code>
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Секретный API Ключ Dify (App Token)
+                    </label>
+                    <input
+                      type="text"
+                      value={adminFormState.difyApiKey}
+                      onChange={(e) =>
+                        setAdminFormState({ ...adminFormState, difyApiKey: e.target.value })
+                      }
+                      placeholder="app-..."
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-[#9E1B32] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={difyPingStatus === 'checking'}
+                      onClick={handlePingDify}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${difyPingStatus === 'checking' ? 'animate-spin' : ''}`} />
+                      <span>Проверить подключение к Dify</span>
+                    </button>
+
+                    {difyPingStatus === 'ok' && (
+                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                        <Check className="w-4 h-4" /> Связь с Dify активна (200 OK)
+                      </span>
+                    )}
+                    {difyPingStatus === 'error' && (
+                      <span className="text-xs font-bold text-rose-600 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4" /> Ошибка подключения
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Подвал модалки */}
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleResetAdminSettings}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition cursor-pointer"
+              >
+                Сбросить к исходным
+              </button>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAdminModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAdminSettings}
+                  className="px-6 py-2 rounded-xl text-xs font-bold text-white bg-[#9E1B32] hover:bg-[#841629] shadow-md transition cursor-pointer"
+                >
+                  Сохранить изменения
+                </button>
+              </div>
             </div>
           </div>
         </div>

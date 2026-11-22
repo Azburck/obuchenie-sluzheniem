@@ -100,6 +100,56 @@ export default async function handler(req, res) {
       sources = []
     } = req.body || {};
 
+    // Шаг 1: Попытка вызвать настроенный Dify Workflow (GigaChat + Jina Reader)
+    const difyApiUrl = process.env.DIFY_API_URL || 'http://localhost/v1/workflows/run';
+    const difyApiKey = process.env.DIFY_API_KEY || 'app-eBGm45XBFwatdfto8Gki4qPKbxbRTsGSuCfJiPMjrf12TU5N';
+
+    if (difyApiUrl && difyApiKey) {
+      try {
+        const urlSource = (sources || []).find((s) => s.type === 'url' && s.title);
+        const partnerUrl = urlSource ? urlSource.title.trim() : '';
+        const textParts = (sources || [])
+          .filter((s) => s.type !== 'url')
+          .map((s) => `[${s.title || s.type}]: ${s.content || ''}`)
+          .join('\n\n');
+
+        const difyController = new AbortController();
+        const difyTimeout = setTimeout(() => difyController.abort(), 45000);
+
+        const difyResp = await fetch(difyApiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${difyApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            inputs: {
+              org_name: orgName || '',
+              partner_url: partnerUrl,
+              materials_text: textParts,
+              contact_fio: contactFio || ''
+            },
+            response_mode: 'blocking',
+            user: contactEmail || 'ranepa-partner'
+          }),
+          signal: difyController.signal
+        });
+        clearTimeout(difyTimeout);
+
+        if (difyResp.ok) {
+          const difyJson = await difyResp.json();
+          const difyTasks = difyJson?.data?.outputs?.tasks;
+          if (Array.isArray(difyTasks) && difyTasks.length > 0) {
+            console.log('Успешная генерация через Dify Workflow (GigaChat)');
+            return res.status(200).json({ tasks: difyTasks });
+          }
+        }
+      } catch (difyErr) {
+        console.warn('Dify Workflow недоступен, переход к резервному генератору:', difyErr.message);
+      }
+    }
+
+
     const parts = [];
     let textContext = `Организация социального партнера: ${orgName || 'Не указана'}\n` +
       `Контактное лицо: ${contactFio || 'Не указано'}\n` +
