@@ -75,25 +75,23 @@ function getGigaChatToken(authKey, scope = 'GIGACHAT_API_PERS') {
   });
 }
 
-// Вызов Chat Completions GigaChat
-function callGigaChatCompletions(accessToken, messages, model = 'GigaChat') {
+// Вызов Chat Completions GigaChat (через актуальный эндпоинт api.giga.chat)
+function callGigaChatCompletions(accessToken, messages, model = 'GigaChat-2') {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({
       model: model,
       messages: messages,
       temperature: 0.3,
-      max_tokens: 2200
+      max_tokens: 1400
     });
 
     const options = {
-      hostname: 'gigachat.devices.sberbank.ru',
+      hostname: 'api.giga.chat',
       port: 443,
-      path: '/api/v1/chat/completions',
+      path: '/v1/chat/completions',
       method: 'POST',
       agent: false,
       rejectUnauthorized: false,
-      minVersion: 'TLSv1.2',
-      maxVersion: 'TLSv1.2',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -212,11 +210,25 @@ export async function handler(event, context) {
       }
 
       // 4. OAuth test with TLS 1.2
+      let testToken = null;
       try {
-        const token = await getGigaChatToken(gigachatKey, gigachatScope);
-        results.oauth = { ok: true, tokenPrefix: token.substring(0, 15) + '...' };
+        testToken = await getGigaChatToken(gigachatKey, gigachatScope);
+        results.oauth = { ok: true, tokenPrefix: testToken.substring(0, 15) + '...' };
       } catch (e) {
         results.oauth = { ok: false, error: e.message };
+      }
+
+      // 5. Minimal Completions test
+      if (testToken) {
+        const tComp = Date.now();
+        try {
+          const answer = await callGigaChatCompletions(testToken, [
+            { role: 'user', content: 'Ответь одним словом: ТЕСТ' }
+          ]);
+          results.completions = { ok: true, answer: answer.slice(0, 50), tookMs: Date.now() - tComp };
+        } catch (e) {
+          results.completions = { ok: false, error: e.message, tookMs: Date.now() - tComp };
+        }
       }
 
       results.gigachatKeyInfo = {
@@ -282,6 +294,7 @@ export async function handler(event, context) {
 
     const systemPrompt = `Ты — ведущий эксперт Проектного офиса программы «Обучение служением» РАНХиГС (Президентская академия) и федеральный методолог платформы Добро.рф.
 Твоя задача: на основе описания организации-партнера и материалов сформулировать ровно 3 РАЗНОПЛАНОВЫХ варианта проектных задач для студентов под строгий стандарт Добро.рф.
+Формулируй емко, прикладным языком, структурированно и без воды. Поле task_description: 2-4 предложения (проблема и шаги студентов). Поле expected_product: 1-2 предложения (конкретный осязаемый результат).
 
 Официальные 13 направлений Добро.рф (выбирай от 1 до 3 подходящих для каждого варианта, обязательно с префиксом #):
 #МЫВМЕСТЕ, #создавай_возможности, #развивай_среду, #будь_здоров, #сохраняй_природу, #стирай_границы, #защищай, #объединяй, #помни, #открывай_страну, #делись_опытом, #вклад_в_будущее, #расскажи_о_главном.
@@ -291,7 +304,7 @@ export async function handler(event, context) {
 - "variantLabel": "Вариант 1" (или "Вариант 2", "Вариант 3")
 - "task_title": краткое емкое название до 120 символов
 - "directions": массив от 1 до 3 хэштегов из списка выше (например ["#развивай_среду", "#создавай_возможности"])
-- "task_description": подробное описание социальной проблемы и задачи студентов (до 2000 символов)
+- "task_description": описание проблемы и задачи студентов (2-4 предложения)
 - "target_audience": благополучатели (например: дети с ОВЗ, ветераны, пожилые граждане)
 - "expected_product": конкретный прикладной результат (цифровой сервис, аналитический отчет, программа)
 - "region": "Москва" (или указанный регион)
@@ -331,7 +344,22 @@ ${materialsText}`;
       if (start !== -1 && end !== -1 && end > start) {
         parsedTasks = JSON.parse(jsonStr.substring(start, end + 1));
       } else {
-        throw new Error('Модель вернула некорректный JSON');
+        const objStart = jsonStr.indexOf('{');
+        const objEnd = jsonStr.lastIndexOf('}');
+        if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+          const single = JSON.parse(jsonStr.substring(objStart, objEnd + 1));
+          parsedTasks = single.tasks && Array.isArray(single.tasks) ? single.tasks : [single];
+        } else {
+          throw new Error('Модель вернула некорректный JSON');
+        }
+      }
+    }
+
+    if (!Array.isArray(parsedTasks)) {
+      if (parsedTasks && parsedTasks.tasks && Array.isArray(parsedTasks.tasks)) {
+        parsedTasks = parsedTasks.tasks;
+      } else if (typeof parsedTasks === 'object' && parsedTasks !== null) {
+        parsedTasks = [parsedTasks];
       }
     }
 
