@@ -485,7 +485,8 @@ const DEFAULT_SITE_SETTINGS = {
   partnerCardText: 'Вам не нужно вручную изучать регламенты. Загрузите презентацию вашей организации или надиктуйте идею мероприятия голосом во вкладке «Сформировать задачу» — интеллектуальный помощник автоматически подготовит все поля шаблона для публикации на платформе Добро.рф.',
   submitButtonText: 'Сформировать социальную задачу',
   difyApiUrl: 'http://localhost/v1/workflows/run',
-  difyApiKey: 'app-eBGm45XBFwatdfto8Gki4qPKbxbRTsGSuCfJiPMjrf12TU5N'
+  difyApiKey: 'app-eBGm45XBFwatdfto8Gki4qPKbxbRTsGSuCfJiPMjrf12TU5N',
+  yandexFunctionUrl: ''
 };
 
 export default function App() {
@@ -1134,7 +1135,7 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
     }
 
     // 2. Резервный вызов через серверный /api/generate
-    const apiEndpoint = import.meta.env.VITE_API_ENDPOINT || '/api/generate';
+    const apiEndpoint = siteSettings.yandexFunctionUrl || import.meta.env.VITE_API_ENDPOINT || '/api/generate';
     try {
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -3820,6 +3821,27 @@ ${extractedText.slice(0, 20000)}` : `Файл организации: ${file.nam
                     <div className="text-xs text-emerald-900 leading-relaxed">
                       <strong>Dify Workflow активен:</strong> приложение обращается к локальному серверу Dify в Docker, который через узел Jina Reader собирает контекст с сайта партнера, а через GigaChat API упаковывает проектные задачи строго под анкету Добро.рф.
                     </div>
+                  </div>
+
+                  <div className="space-y-1.5 p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+                    <div className="flex items-center gap-2 text-xs font-bold text-amber-900 uppercase">
+                      <span>☁️ Яндекс Облако (Yandex Cloud Functions)</span>
+                    </div>
+                    <p className="text-xs text-amber-800">
+                      Укажите публичный HTTPS-адрес функции в Яндекс Облаке для автономной работы сайта в РФ 24/7 без локального ПК:
+                    </p>
+                    <input
+                      type="text"
+                      value={adminFormState.yandexFunctionUrl || ''}
+                      onChange={(e) =>
+                        setAdminFormState({ ...adminFormState, yandexFunctionUrl: e.target.value })
+                      }
+                      placeholder="https://functions.yandexcloud.net/d4e..."
+                      className="w-full px-3.5 py-2.5 bg-white border border-amber-300 rounded-xl text-xs sm:text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <p className="text-[11px] text-amber-700">
+                      Если поле заполнено, запросы с любого смартфона идут напрямую в функцию Яндекс Облака с GigaChat.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">

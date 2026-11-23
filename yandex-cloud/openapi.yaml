@@ -1,0 +1,39 @@
+openapi: "3.0.0"
+info:
+  title: "Обучение служением — Президентская академия (РАНХиГС) & Добро.рф"
+  version: "1.0.0"
+paths:
+  /api/generate:
+    post:
+      summary: "Автономная генерация проектных задач через GigaChat"
+      operationId: "generateTasks"
+      x-yc-apigateway-integration:
+        type: cloud-functions
+        function_id: "${FUNCTION_ID}"
+        tag: "$latest"
+        service_account_id: "${SERVICE_ACCOUNT_ID}"
+    options:
+      summary: "CORS preflight"
+      operationId: "corsOptions"
+      responses:
+        200:
+          description: "OK"
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-yc-apigateway-integration:
+        type: dummy
+        http_code: 200
+        http_headers:
+          Access-Control-Allow-Origin: "*"
+          Access-Control-Allow-Methods: "GET, POST, OPTIONS"
+          Access-Control-Allow-Headers: "Content-Type, Authorization, X-Requested-With"
+        content:
+          text/plain: ""

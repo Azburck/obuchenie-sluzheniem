@@ -1,0 +1,8 @@
+{
+  "name": "ranepa-gigachat-yandex-function",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Yandex Cloud Function for RANEPA Dobro.rf task generation via GigaChat",
+  "main": "index.js",
+  "dependencies": {}
+}
