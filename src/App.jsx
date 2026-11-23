@@ -486,7 +486,7 @@ const DEFAULT_SITE_SETTINGS = {
   submitButtonText: 'Сформировать социальную задачу',
   difyApiUrl: 'http://localhost/v1/workflows/run',
   difyApiKey: 'app-eBGm45XBFwatdfto8Gki4qPKbxbRTsGSuCfJiPMjrf12TU5N',
-  yandexFunctionUrl: ''
+  yandexFunctionUrl: 'https://functions.yandexcloud.net/d4eee9ti3ripf8d6plr9'
 };
 
 export default function App() {

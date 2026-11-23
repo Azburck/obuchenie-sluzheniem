@@ -4,11 +4,9 @@
 
 import https from 'https';
 import crypto from 'crypto';
-
-// Агент HTTPS с отключенной проверкой SSL для серверов Минцифры/Сбера
-const sberAgent = new https.Agent({
-  rejectUnauthorized: false
-});
+import net from 'net';
+import dns from 'dns';
+import tls from 'tls';
 
 const DOBRO_DIRECTIONS = [
   '#МЫВМЕСТЕ',
@@ -37,12 +35,15 @@ function getGigaChatToken(authKey, scope = 'GIGACHAT_API_PERS') {
       port: 9443,
       path: '/api/v2/oauth',
       method: 'POST',
-      agent: sberAgent,
+      agent: false, // Отключаем keepAlive пул, чтобы не блокировать event loop в serverless
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2',
+      maxVersion: 'TLSv1.2',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
         'RqUID': rqUid,
-        'Authorization': `Basic ${authKey}`,
+        'Authorization': `Basic ${authKey.trim()}`,
         'Content-Length': Buffer.byteLength(postData)
       }
     };
@@ -64,6 +65,10 @@ function getGigaChatToken(authKey, scope = 'GIGACHAT_API_PERS') {
       });
     });
 
+    req.setTimeout(8000, () => {
+      req.destroy(new Error('Таймаут подключения к GigaChat OAuth (8s)'));
+    });
+
     req.on('error', reject);
     req.write(postData);
     req.end();
@@ -76,8 +81,8 @@ function callGigaChatCompletions(accessToken, messages, model = 'GigaChat') {
     const payload = JSON.stringify({
       model: model,
       messages: messages,
-      temperature: 0.4,
-      max_tokens: 3000
+      temperature: 0.3,
+      max_tokens: 2200
     });
 
     const options = {
@@ -85,7 +90,10 @@ function callGigaChatCompletions(accessToken, messages, model = 'GigaChat') {
       port: 443,
       path: '/api/v1/chat/completions',
       method: 'POST',
-      agent: sberAgent,
+      agent: false,
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2',
+      maxVersion: 'TLSv1.2',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -111,6 +119,10 @@ function callGigaChatCompletions(accessToken, messages, model = 'GigaChat') {
       });
     });
 
+    req.setTimeout(80000, () => {
+      req.destroy(new Error('Таймаут ответа модели GigaChat (80s)'));
+    });
+
     req.on('error', reject);
     req.write(payload);
     req.end();
@@ -119,6 +131,10 @@ function callGigaChatCompletions(accessToken, messages, model = 'GigaChat') {
 
 // Главная точка входа для Yandex Cloud Functions
 export async function handler(event, context) {
+  if (context) {
+    context.callbackWaitsForEmptyEventLoop = false;
+  }
+
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -136,6 +152,97 @@ export async function handler(event, context) {
     };
   }
 
+  const gigachatKey = process.env.GIGACHAT_AUTH_KEY || 'MDFhMjAyZWEtMjY3NC03MTUyLWI1ODMtMzljZWQwOTFhY2UzOmUzMzVlZTUxLTFmZWUtNGMzYi1iZGY4LTdhZGIyZGJiNWVhNA==';
+  const gigachatScope = process.env.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS';
+
+  // GET: Health Check и диагностика
+  if (method === 'GET') {
+    const isProbe = (event.queryStringParameters && event.queryStringParameters.probe);
+    if (isProbe) {
+      const results = {};
+      const t0 = Date.now();
+
+      // 1. DNS check
+      try {
+        const dnsRes = await new Promise((resolve, reject) => {
+          dns.lookup('ngw.devices.sberbank.ru', { family: 4 }, (err, addr) => {
+            if (err) reject(err); else resolve(addr);
+          });
+        });
+        results.dns = { ok: true, ip: dnsRes };
+      } catch (e) {
+        results.dns = { ok: false, error: e.message };
+      }
+
+      // 2. TCP connect check to 9443 (timeout 4s)
+      try {
+        const targetIp = results.dns?.ip || '185.157.96.243';
+        const tcpRes = await new Promise((resolve, reject) => {
+          const sock = net.connect(9443, targetIp);
+          sock.setTimeout(4000, () => {
+            sock.destroy(new Error('TCP timeout 4s to 9443'));
+          });
+          sock.on('connect', () => {
+            sock.destroy();
+            resolve('connected');
+          });
+          sock.on('error', reject);
+        });
+        results.tcp9443 = { ok: true, msg: tcpRes };
+      } catch (e) {
+        results.tcp9443 = { ok: false, error: e.message };
+      }
+
+      // 3. TCP connect check to 443 (api.giga.chat)
+      try {
+        const tcp443Res = await new Promise((resolve, reject) => {
+          const sock = net.connect(443, 'api.giga.chat');
+          sock.setTimeout(4000, () => {
+            sock.destroy(new Error('TCP timeout 4s to 443'));
+          });
+          sock.on('connect', () => {
+            sock.destroy();
+            resolve('connected');
+          });
+          sock.on('error', reject);
+        });
+        results.tcp443 = { ok: true, msg: tcp443Res };
+      } catch (e) {
+        results.tcp443 = { ok: false, error: e.message };
+      }
+
+      // 4. OAuth test with TLS 1.2
+      try {
+        const token = await getGigaChatToken(gigachatKey, gigachatScope);
+        results.oauth = { ok: true, tokenPrefix: token.substring(0, 15) + '...' };
+      } catch (e) {
+        results.oauth = { ok: false, error: e.message };
+      }
+
+      results.gigachatKeyInfo = {
+        keyLength: gigachatKey ? gigachatKey.length : 0,
+        scope: gigachatScope
+      };
+
+      results.totalTimeMs = Date.now() - t0;
+      return {
+        statusCode: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(results)
+      };
+    }
+
+    return {
+      statusCode: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'ok',
+        service: 'ranepa-gigachat-generator',
+        timestamp: new Date().toISOString()
+      })
+    };
+  }
+
   if (method !== 'POST') {
     return {
       statusCode: 405,
@@ -143,10 +250,6 @@ export async function handler(event, context) {
       body: JSON.stringify({ error: 'Method not allowed' })
     };
   }
-
-  // Ключ авторизации GigaChat (из переменных окружения функции или по умолчанию)
-  const gigachatKey = process.env.GIGACHAT_AUTH_KEY || 'MDFhMjAyZWEtMjY3NC03MTUyLWI1ODMtMzljZWQwOTFhY2UzOmUzMzVlZTUxLTFmZWUtNGMzYi1iZGY4LTdhZGIyZGJiNWVhNA==';
-  const gigachatScope = process.env.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS';
 
   try {
     let body = {};
